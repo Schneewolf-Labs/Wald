@@ -8,8 +8,7 @@ venv/
 build/
 dist/
 
-# uv
-uv.lock
+# uv — the lockfile IS committed (this is an application); the venv is not.
 
 # Env / secrets
 .env
