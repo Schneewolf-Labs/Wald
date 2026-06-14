@@ -1,0 +1,20 @@
+# Postgres with the pgvector extension preinstalled.
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: wald
+      POSTGRES_PASSWORD: wald
+      POSTGRES_DB: wald
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wald -d wald"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
