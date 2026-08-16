@@ -14,7 +14,7 @@ cleanly when it is absent, so `pytest` stays useful on a machine with no Docker.
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -22,7 +22,6 @@ from sqlalchemy.exc import SQLAlchemyError
 @pytest.fixture(scope="session")
 def _engine():
     from wald.config import get_settings
-    from wald.models import Base
 
     url = make_url(get_settings().database_url)
     test_url = url.set(database=f"{url.database}_test")
@@ -42,10 +41,12 @@ def _engine():
     finally:
         admin.dispose()
 
+    # Built through the production path, so the suite cannot pass against a schema the
+    # application would never produce.
+    from wald.db import init_schema
+
     engine = create_engine(test_url, future=True)
-    with engine.begin() as conn:
-        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-    Base.metadata.create_all(engine)
+    init_schema(engine)
     yield engine
     engine.dispose()
 

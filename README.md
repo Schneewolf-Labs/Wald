@@ -57,12 +57,51 @@ uv run wald-seed examples/acme
 uv run wald-api                # http://localhost:8000/docs
 
 # 5. Run the MCP server (agents)
-uv run wald-mcp
+uv run wald-mcp                                # stdio, for an agent that spawns Wald
+uv run wald-mcp --transport streamable-http    # http://localhost:8091/mcp, for the fleet
 ```
 
 Without `ANTHROPIC_API_KEY` / `VOYAGE_API_KEY` set, Wald runs in **dev mode**: embeddings use a
 deterministic local hash and the `/ask` endpoint returns retrieved context without LLM synthesis.
 This keeps the whole stack runnable end-to-end with zero external dependencies.
+
+## Embeddings without an API key
+
+The hash fallback is not semantic — it keeps the plumbing runnable, but the semantic arm of hybrid
+search contributes little, and retrieval rests almost entirely on full-text matching. Point Wald at
+any OpenAI-compatible `/v1` endpoint instead — a self-hosted embedding server, vLLM, TEI,
+llama.cpp, or OpenAI — and it takes precedence over Voyage:
+
+```bash
+WALD_EMBED_BASE_URL=http://127.0.0.1:8082/v1
+WALD_EMBED_MODEL=          # omit for single-model servers that reject an unknown model
+WALD_EMBED_DIM=2048        # must match the model
+```
+
+`WALD_EMBED_DIM` fixes the vector column width when the table is created, so changing it means
+recreating the `embedding` table and re-running `wald-seed`. That is cheap by design — the content
+directory is the source of truth and the database is a derived index of it. A wrong dimension is
+reported against the setting rather than surfacing as a pgvector error about expected dimensions.
+
+## Agents
+
+An MCP client points at Wald and gets twelve tools: `search_wald`, `ask_wald`, `get_wiki_page`,
+`list_resources`, `get_resource`, `find_agents`, `list_agents`, `register_agent`,
+`send_agent_message`, `read_inbox`, `ack_messages`, `get_conversation`.
+
+`register_agent` is how a fleet discovers itself instead of every instance carrying a
+hand-maintained list of every other instance — the N² configuration problem. An agent announces
+its slug, capabilities and endpoint; peers resolve each other through `find_agents`. Re-registering
+after a restart updates the same row.
+
+A2A messaging is a mailbox. `read_inbox` marks queued messages **delivered**, not read; they stay
+in the unread set until `ack_messages`. An agent that reads its inbox and then crashes therefore
+sees the work again, because losing queued work silently is worse than delivering it twice.
+
+> **There is no authentication yet.** `send_agent_message` takes the sender's identity as an
+> argument, so any caller can claim to be any agent. That is survivable on a trusted network and
+> is not survivable on an open one. `WALD_MCP_HOST` defaults to loopback for that reason —
+> exposing the hub beyond the machine should be a decision someone makes, not one they inherit.
 
 ## Content lives in files
 

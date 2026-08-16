@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # The real thing, not stock Postgres: the schema needs the pgvector extension, and a
+    # suite that skipped the database-backed tests would pass while proving nothing about
+    # the half of the code that talks to it.
+    services:
+      db:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: wald
+          POSTGRES_PASSWORD: wald
+          POSTGRES_DB: wald
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wald -d wald"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      WALD_DATABASE_URL: postgresql+psycopg://wald:wald@localhost:5432/wald
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv sync --extra dev
+
+      - name: Lint
+        run: uv run ruff check src tests
+
+      - name: Test
+        run: uv run pytest -q
+
+      # Loading the example tenant end to end catches what unit tests structurally cannot:
+      # a content file that no longer parses, a field the loader stopped accepting, or a
+      # schema change that makes a documented quickstart step fail.
+      - name: Load the example tenant
+        run: |
+          uv run wald-init-db
+          uv run wald-seed examples/acme
+
+      - name: Reloading unchanged content changes nothing
+        run: |
+          uv run wald-seed examples/acme | tee /tmp/reseed.log
+          grep -q "0 created, 0 updated" /tmp/reseed.log

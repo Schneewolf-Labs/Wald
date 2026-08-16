@@ -156,3 +156,21 @@ def test_empty_root_is_an_error_not_a_silent_success(session, tmp_path):
 def test_missing_root_names_the_path(session, tmp_path):
     with pytest.raises(SeedError, match="does not exist"):
         seed(session, tmp_path / "nope")
+
+
+def test_a_dimension_mismatch_names_the_setting_and_the_table(session, _engine):
+    # pgvector reports this as "expected 2048 dimensions, not 1024" on the first insert,
+    # naming neither the setting nor the table, partway through loading content.
+    from unittest.mock import patch
+
+    from wald.db import SchemaMismatch, check_embedding_dim
+
+    with patch("wald.db._settings.embed_dim", 999):
+        with pytest.raises(SchemaMismatch, match="WALD_EMBED_DIM is 999"):
+            check_embedding_dim(_engine)
+
+
+def test_a_matching_dimension_passes(session, _engine):
+    from wald.db import check_embedding_dim
+
+    check_embedding_dim(_engine)  # must not raise

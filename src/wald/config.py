@@ -14,7 +14,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="WALD_", env_file=".env", extra="ignore")
+    # populate_by_name so the aliased fields (the two provider keys) can also be set by
+    # their field name. Without it a validation_alias *replaces* the field name, and
+    # `Settings(voyage_api_key=...)` silently does nothing -- which makes the config
+    # awkward to construct in a test and surprising everywhere else.
+    model_config = SettingsConfigDict(
+        env_prefix="WALD_", env_file=".env", extra="ignore", populate_by_name=True
+    )
 
     # Database
     database_url: str = "postgresql+psycopg://wald:wald@localhost:5432/wald"
@@ -34,6 +40,13 @@ class Settings(BaseSettings):
     embed_model: str = "voyage-3.5"
     embed_dim: int = 1024
 
+    # Any OpenAI-compatible `/v1` endpoint, which takes precedence over Voyage. Set this to
+    # a self-hosted embedding server to get real semantic retrieval without an API key --
+    # the hash fallback is not semantic, so without one of these the semantic arm of hybrid
+    # search contributes noise. Include the `/v1`: e.g. http://127.0.0.1:8082/v1
+    embed_base_url: str | None = None
+    embed_api_key: str | None = None
+
     # Content
     # A directory of files is the source of truth for the hub; see services/seed.py. The
     # default is gitignored, because real tenant content is exactly what must never be
@@ -47,8 +60,12 @@ class Settings(BaseSettings):
 
     # MCP server. stdio suits an agent that spawns Wald as a child process; streamable-http
     # is what a remote agent on another host needs, and most agents are on another host.
+    #
+    # Loopback by default: the MCP surface has no authentication yet, and `from_agent` on
+    # a message is a claim rather than a proof. Exposing it beyond the machine should be a
+    # decision someone makes, not one they inherit from a default.
     mcp_transport: str = "stdio"
-    mcp_host: str = "0.0.0.0"
+    mcp_host: str = "127.0.0.1"
     mcp_port: int = 8091
 
     @property

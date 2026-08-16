@@ -81,8 +81,13 @@ streaming/long-running conversations and richer protocols (e.g. aligning with em
 
 ## Roadmap
 
-- **Now (this scaffold):** data models, service layer, REST + MCP surfaces, dev-mode fallbacks.
-- **Next:** Alembic migrations; real hybrid-search SQL + RRF; ingestion pipeline + background
-  re-embedding on writes; authn/authz (who can read/write which space/resource); web UI.
+- **Done:** data models, service layer, REST + MCP surfaces, dev-mode fallbacks; file-backed
+  content loading (`wald-seed`); MCP over stdio *and* streamable-http; the A2A round trip
+  (register / discover / send / inbox / ack); hybrid search on Postgres full-text + pgvector
+  fused by RRF, with a functional GIN index.
+- **Next:** **authn/authz** — the MCP surface takes `from_agent` as an argument, so an agent's
+  identity is a claim rather than a proof, and that is the blocker for exposing the hub beyond a
+  trusted network. Then Alembic migrations; background re-embedding on writes (ingestion is
+  inline and synchronous, so a wiki write blocks on an embedding API call); web UI.
 - **Later:** push-based A2A (webhooks/streaming); per-space permissions; audit log; connectors that
   auto-populate the resource directory; eval harness for RAG answer quality.

@@ -39,5 +39,14 @@ def run() -> None:
     """Console-script entry point (``wald-api``)."""
     import uvicorn
 
+    from wald.db import SchemaMismatch, check_embedding_dim, engine
+
+    # Same reasoning as the MCP server: a dimension mismatch makes every search fail while
+    # the service looks healthy, so refuse to start instead.
+    try:
+        check_embedding_dim(engine)
+    except SchemaMismatch as exc:
+        raise SystemExit(f"wald-api: {exc}") from exc
+
     settings = get_settings()
     uvicorn.run("wald.main:app", host=settings.host, port=settings.port, reload=settings.env == "dev")
