@@ -80,14 +80,25 @@ def search(session: Session, query: str, top_k: int = 6) -> list[SearchHit]:
             scores[key] = scores.get(key, 0.0) + 1.0 / (_RRF_K + rank)
             rows[key] = emb
 
-    ordered = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[:top_k]
+    # Collapse to one hit per source, keeping its best-scoring chunk. Ranking happens over
+    # chunks, so a long wiki page can occupy several of the top slots with different parts
+    # of itself -- which is the same answer repeated, at the cost of the other documents
+    # the caller asked for. top_k means "k things to look at", not "k fragments".
+    best: dict[tuple[str, str], tuple[float, Embedding]] = {}
+    for key, score in scores.items():
+        emb = rows[key]
+        source = (emb.source_type, str(emb.source_id))
+        if source not in best or score > best[source][0]:
+            best[source] = (score, emb)
+
+    ordered = sorted(best.values(), key=lambda pair: pair[0], reverse=True)[:top_k]
     return [
         SearchHit(
-            source_type=rows[key].source_type,
-            source_id=rows[key].source_id,
-            title=rows[key].meta.get("title", "") if isinstance(rows[key].meta, dict) else "",
-            snippet=rows[key].content[:300],
+            source_type=emb.source_type,
+            source_id=emb.source_id,
+            title=emb.meta.get("title", "") if isinstance(emb.meta, dict) else "",
+            snippet=emb.content[:300],
             score=round(score, 5),
         )
-        for key, score in ordered
+        for score, emb in ordered
     ]

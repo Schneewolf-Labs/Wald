@@ -15,9 +15,17 @@ from wald.models import Embedding
 from wald.services.search import _lexical_ranking, _tsquery_terms, search
 
 DOCS = [
-    ("wiki", "Deploy process", "Every service ships from main. Roll back by re-deploying the previous SHA."),
+    (
+        "wiki",
+        "Deploy process",
+        "Every service ships from main. Roll back by re-deploying the previous SHA.",
+    ),
     ("wiki", "Incident response", "Page the on-call engineer. Declare an incident in the channel."),
-    ("resource", "Analytics Warehouse", "Columnar warehouse at warehouse.internal.acme.example port 5439."),
+    (
+        "resource",
+        "Analytics Warehouse",
+        "Columnar warehouse at warehouse.internal.acme.example port 5439.",
+    ),
     ("resource", "Orders API", "Internal REST API for order lookup and fulfilment status."),
 ]
 
@@ -113,3 +121,45 @@ def test_search_survives_a_query_with_no_usable_terms(session, corpus):
     # Semantic still answers; lexical contributes nothing. Must not raise.
     hits = search(session, "???", top_k=3)
     assert isinstance(hits, list)
+
+
+def test_one_hit_per_source_even_when_several_chunks_match(session):
+    # Chunk-level ranking lets one long page occupy several top slots with different parts
+    # of itself -- the same answer repeated, at the cost of the documents the caller asked
+    # for. top_k means "k things to look at", not "k fragments".
+    import uuid as _uuid
+
+    from wald.services.embeddings import get_embedding_provider
+
+    provider = get_embedding_provider()
+    page_id = _uuid.uuid4()
+    for i, body in enumerate(
+        ["deploy the service to production", "deploy rollback deploy again", "deploy notes"]
+    ):
+        session.add(
+            Embedding(
+                source_type="wiki",
+                source_id=page_id,
+                chunk_index=i,
+                content=body,
+                embedding=provider.embed([body])[0],
+                meta={"title": "Long page"},
+            )
+        )
+    other = "unrelated content about warehouses"
+    session.add(
+        Embedding(
+            source_type="wiki",
+            source_id=_uuid.uuid4(),
+            chunk_index=0,
+            content=other,
+            embedding=provider.embed([other])[0],
+            meta={"title": "Other page"},
+        )
+    )
+    session.flush()
+
+    hits = search(session, "deploy", top_k=5)
+    ids = [h.source_id for h in hits]
+    assert len(ids) == len(set(ids)), f"duplicate sources in results: {[h.title for h in hits]}"
+    assert ids[0] == page_id
