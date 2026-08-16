@@ -47,8 +47,12 @@ class Settings(BaseSettings):
 
     # MCP server. stdio suits an agent that spawns Wald as a child process; streamable-http
     # is what a remote agent on another host needs, and most agents are on another host.
+    #
+    # Loopback by default: the MCP surface has no authentication yet, and `from_agent` on
+    # a message is a claim rather than a proof. Exposing it beyond the machine should be a
+    # decision someone makes, not one they inherit from a default.
     mcp_transport: str = "stdio"
-    mcp_host: str = "0.0.0.0"
+    mcp_host: str = "127.0.0.1"
     mcp_port: int = 8091
 
     @property
