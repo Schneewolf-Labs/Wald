@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from wald.config import get_settings
@@ -25,14 +25,35 @@ def get_session() -> Iterator[Session]:
         session.close()
 
 
-def init_db() -> None:
-    """Enable pgvector and create all tables. Idempotent.
+def init_schema(target: Engine) -> None:
+    """Create everything Wald needs in `target`. Idempotent.
+
+    Takes an engine so the test suite builds its side database through exactly this code
+    path. A fixture that hand-rolled its own schema would drift from the real one, and the
+    first thing to drift is usually an index -- which does not fail a test, it just makes
+    the query it was written for silently slow.
 
     TODO: replace with Alembic migrations before this leaves the prototype stage.
     """
-    with engine.begin() as conn:
+    with target.begin() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-    Base.metadata.create_all(engine)
+    Base.metadata.create_all(target)
+    with target.begin() as conn:
+        # Functional GIN index matching the expression in services/search.py exactly; a
+        # mismatch leaves the planner sequentially scanning every chunk. Declared here
+        # rather than on the model because create_all skips tables that already exist,
+        # indexes included, so an existing deployment would never acquire it.
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_embedding_content_fts "
+                "ON embedding USING GIN (to_tsvector('english', content))"
+            )
+        )
+
+
+def init_db() -> None:
+    """Create the schema in the configured database."""
+    init_schema(engine)
 
 
 def init_db_cli() -> None:
