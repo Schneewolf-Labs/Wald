@@ -279,7 +279,7 @@ def seed_cli() -> None:
     import argparse
 
     from wald.config import get_settings
-    from wald.db import SessionLocal
+    from wald.db import SchemaMismatch, SessionLocal, check_embedding_dim, engine
 
     parser = argparse.ArgumentParser(description="Load file-backed content into Wald.")
     parser.add_argument(
@@ -295,6 +295,13 @@ def seed_cli() -> None:
     )
     args = parser.parse_args()
     root = Path(args.root or get_settings().content_dir)
+
+    # Checked up front: the alternative is discovering it partway through embedding a
+    # wiki, as a pgvector error that names neither the setting nor the table.
+    try:
+        check_embedding_dim(engine)
+    except SchemaMismatch as exc:
+        raise SystemExit(f"wald-seed: {exc}") from exc
 
     with SessionLocal() as session:
         try:

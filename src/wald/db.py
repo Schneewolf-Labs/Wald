@@ -49,6 +49,45 @@ def init_schema(target: Engine) -> None:
                 "ON embedding USING GIN (to_tsvector('english', content))"
             )
         )
+    check_embedding_dim(target)
+
+
+class SchemaMismatch(Exception):
+    """The stored schema cannot hold what the current configuration produces."""
+
+
+def check_embedding_dim(target: Engine) -> None:
+    """Fail if the vector column's width disagrees with ``embed_dim``.
+
+    The width is fixed when the table is created, so changing `WALD_EMBED_DIM` -- or
+    switching to a provider whose model has a different one -- leaves a table that cannot
+    store the new vectors. Postgres reports that as `expected 2048 dimensions, not 1024`
+    on the first insert, which names neither the setting nor the table and is genuinely
+    confusing to land on midway through loading content.
+
+    Checked at schema time so it surfaces before a long re-index rather than during one.
+    """
+    with target.connect() as conn:
+        stored = conn.execute(
+            text(
+                "SELECT format_type(atttypid, atttypmod) FROM pg_attribute "
+                "WHERE attrelid = 'embedding'::regclass AND attname = 'embedding' "
+                "AND NOT attisdropped"
+            )
+        ).scalar()
+
+    if not stored or not stored.startswith("vector("):
+        return
+    width = int(stored[len("vector(") : -1])
+    configured = _settings.embed_dim
+    if width != configured:
+        raise SchemaMismatch(
+            f"the embedding table stores {width}-dimensional vectors but WALD_EMBED_DIM "
+            f"is {configured}. The column width is fixed at table creation, so either set "
+            f"WALD_EMBED_DIM={width}, or drop the embedding table and re-run wald-init-db "
+            "followed by wald-seed. Rebuilding is cheap: the content directory is the "
+            "source of truth and the database is a derived index of it."
+        )
 
 
 def init_db() -> None:
