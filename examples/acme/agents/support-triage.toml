@@ -1,0 +1,22 @@
+# One entry per file: the slug defaults to the filename stem ("support-triage").
+
+name = "Support Triage"
+description = """
+Reads inbound support tickets, classifies them by product area and urgency, and either
+answers directly from the wiki or routes to the owning team. Escalates anything touching
+billing to a human.
+"""
+capabilities = ["ticket-triage", "wiki-qa", "routing"]
+endpoint_url = "https://agents.internal.acme.example/support-triage/mcp"
+protocol = "mcp"
+owner = "support-eng"
+status = "active"
+
+[auth]
+method = "bearer"
+secret_ref = "vault://kv/support/triage-agent#token"
+
+[agent_card]
+contact = "#support-eng"
+sla = "responds within 30s; falls back to a human queue on timeout"
+model = "claude-sonnet-5"

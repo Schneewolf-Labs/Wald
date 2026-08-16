@@ -24,7 +24,7 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("ANTHROPIC_API_KEY", "WALD_ANTHROPIC_API_KEY"),
     )
-    answer_model: str = "claude-opus-4-8"
+    answer_model: str = "claude-opus-5"
 
     # Embeddings
     voyage_api_key: str | None = Field(
@@ -34,10 +34,22 @@ class Settings(BaseSettings):
     embed_model: str = "voyage-3.5"
     embed_dim: int = 1024
 
+    # Content
+    # A directory of files is the source of truth for the hub; see services/seed.py. The
+    # default is gitignored, because real tenant content is exactly what must never be
+    # committed to a public repo.
+    content_dir: str = "content"
+
     # Server
     host: str = "0.0.0.0"
     port: int = 8000
     env: str = "dev"
+
+    # MCP server. stdio suits an agent that spawns Wald as a child process; streamable-http
+    # is what a remote agent on another host needs, and most agents are on another host.
+    mcp_transport: str = "stdio"
+    mcp_host: str = "0.0.0.0"
+    mcp_port: int = 8091
 
     @property
     def has_llm(self) -> bool:
