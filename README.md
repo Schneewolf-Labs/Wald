@@ -50,16 +50,48 @@ uv sync
 cp .env.example .env          # fill in keys when you have them
 uv run wald-init-db
 
-# 3. Run the API (humans + REST)
+# 3. Load some content
+uv run wald-seed examples/acme
+
+# 4. Run the API (humans + REST)
 uv run wald-api                # http://localhost:8000/docs
 
-# 4. Run the MCP server (agents)
+# 5. Run the MCP server (agents)
 uv run wald-mcp
 ```
 
 Without `ANTHROPIC_API_KEY` / `VOYAGE_API_KEY` set, Wald runs in **dev mode**: embeddings use a
 deterministic local hash and the `/ask` endpoint returns retrieved context without LLM synthesis.
 This keeps the whole stack runnable end-to-end with zero external dependencies.
+
+## Content lives in files
+
+The hub can be written through the REST API, but the intended source of truth is a directory of
+plain files that `wald-seed` loads:
+
+```
+content/
+  wiki/*.md          markdown with TOML frontmatter (+++ fenced)
+  resources/*.toml   what a system is, how to connect, where its secret lives
+  agents/*.toml      the agent registry
+```
+
+Slugs default to the filename stem. Loading is an idempotent upsert, and unchanged files are
+skipped — re-running the loader does not manufacture wiki revisions, so page history stays a record
+of what someone actually edited. `--dry-run` reports what would change and rolls back.
+
+Keeping content in files means it can live wherever an organization already keeps private material,
+review and history come from whatever version control wraps that directory, and rebuilding the hub
+is one command — which is what makes the database safe to drop.
+
+> **`content/` is gitignored, and that is deliberate.** A real hub holds internal process docs,
+> hostnames, ports, and which vault path holds which credential. That is precisely what must not be
+> committed to a public repo, so the ignore rule covers the whole directory: a new file dropped in
+> is ignored by default rather than only if someone remembered to name it correctly. The committed
+> `examples/acme` tenant is fictional.
+
+Resource and agent entries record a **reference** to a secret (`vault://kv/...`), never the secret
+itself. Wald tells an agent which door to knock on and which key to fetch; it is not the keyring.
 
 ## Status
 

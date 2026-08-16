@@ -27,6 +27,7 @@ dev = [
 wald-api = "wald.main:run"
 wald-mcp = "wald.mcp.server:run"
 wald-init-db = "wald.db:init_db_cli"
+wald-seed = "wald.services.seed:seed_cli"
 
 [build-system]
 requires = ["hatchling"]

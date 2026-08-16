@@ -1,0 +1,51 @@
+# Several related entries can share one file via an array of tables. The alternative --
+# one file per entry -- is also supported, and takes its slug from the filename.
+
+[[resource]]
+slug = "analytics-warehouse"
+name = "Analytics Warehouse"
+kind = "database"
+description = """
+Columnar warehouse holding modelled business data: orders, subscriptions, and the daily
+revenue rollups. Read-only for everyone outside the data team. This is the right source
+for any question about historical business metrics; the production Postgres is not.
+"""
+docs_url = "https://wiki.internal.acme.example/data/warehouse"
+owner = "data-team"
+tags = ["analytics", "sql", "read-only"]
+status = "active"
+
+[resource.connection]
+host = "warehouse.internal.acme.example"
+port = 5439
+database = "analytics"
+dialect = "redshift"
+
+# Never a raw secret -- only a reference to where the secret lives. Wald tells an agent
+# which door to knock on and which key to fetch; it is not the keyring.
+[resource.auth]
+method = "vault"
+secret_ref = "vault://kv/data/warehouse#readonly"
+note = "Request access in #data-access; grants are per-team, not per-person."
+
+[[resource]]
+slug = "orders-api"
+name = "Orders API"
+kind = "api"
+description = """
+Internal REST API for order lookup and fulfilment status. Rate limited to 100 req/s per
+token. Returns customer PII, so responses must not be logged verbatim.
+"""
+docs_url = "https://wiki.internal.acme.example/api/orders"
+owner = "fulfilment-team"
+tags = ["api", "pii", "internal"]
+status = "active"
+
+[resource.connection]
+base_url = "https://orders.internal.acme.example/v2"
+openapi = "https://orders.internal.acme.example/v2/openapi.json"
+
+[resource.auth]
+method = "oauth2-client-credentials"
+secret_ref = "vault://kv/fulfilment/orders-api#client"
+scopes = ["orders:read"]

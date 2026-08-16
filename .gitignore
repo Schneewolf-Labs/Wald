@@ -28,3 +28,17 @@ dist/
 # Data
 *.sqlite3
 pgdata/
+*.dump
+*.sql.gz
+
+# Tenant content — NEVER COMMITTED.
+#
+# `content/` is where a real organization's wiki pages, resource directory and agent
+# registry live. That material is the whole point of Wald and is exactly what must not
+# end up in a public repo: internal process docs, hostnames, ports, which secret lives
+# in which vault. The rule is the entire directory rather than a pattern, so a new file
+# dropped in is ignored by default instead of ignored only if someone remembered to
+# name it correctly.
+#
+# Committed example content lives in `examples/` and is fictional.
+content/
