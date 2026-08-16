@@ -26,7 +26,7 @@ from mcp.server.fastmcp.exceptions import ToolError
 from sqlalchemy import select
 
 from wald.config import get_settings
-from wald.db import SessionLocal
+from wald.db import SchemaMismatch, SessionLocal, check_embedding_dim, engine
 from wald.models import Agent, Resource, WikiPage
 from wald.services import a2a, ingest, rag
 from wald.services import search as search_svc
@@ -287,6 +287,16 @@ def run() -> None:
         help="stdio for a local child process; streamable-http for remote agents",
     )
     args = parser.parse_args()
+
+    # Fail at startup rather than on every query. A server whose configured dimension no
+    # longer matches the stored column answers `list_tools` perfectly and then fails every
+    # search, which presents to the agent using it as "all your tools are broken" -- a much
+    # harder thing to diagnose from the other end of an MCP connection than a server that
+    # declined to start.
+    try:
+        check_embedding_dim(engine)
+    except SchemaMismatch as exc:
+        raise SystemExit(f"wald-mcp: {exc}") from exc
 
     if args.transport != "stdio":
         # stdio must keep stdout clean for the protocol itself, so this only prints when
