@@ -84,10 +84,12 @@ streaming/long-running conversations and richer protocols (e.g. aligning with em
 - **Done:** data models, service layer, REST + MCP surfaces, dev-mode fallbacks; file-backed
   content loading (`wald-seed`); MCP over stdio *and* streamable-http; the A2A round trip
   (register / discover / send / inbox / ack); hybrid search on Postgres full-text + pgvector
-  fused by RRF, with a functional GIN index.
+  fused by RRF, with a functional GIN index; the human web UI, server-rendered at `/`.
 - **Next:** **authn/authz** — the MCP surface takes `from_agent` as an argument, so an agent's
   identity is a claim rather than a proof, and that is the blocker for exposing the hub beyond a
-  trusted network. Then Alembic migrations; background re-embedding on writes (ingestion is
-  inline and synchronous, so a wiki write blocks on an embedding API call); web UI.
+  trusted network. It is also what the web UI needs before it can offer editing, since today
+  anyone who can reach the API can rewrite any page. Then Alembic migrations; background
+  re-embedding on writes (ingestion is inline and synchronous, so a wiki write blocks on an
+  embedding API call).
 - **Later:** push-based A2A (webhooks/streaming); per-space permissions; audit log; connectors that
   auto-populate the resource directory; eval harness for RAG answer quality.

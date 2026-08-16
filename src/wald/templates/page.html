@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ page.title }} — Wald{% endblock %}
+
+{% block content %}
+<p class="crumb"><a href="/">Wald</a> / wiki / {{ page.space }}</p>
+
+<h1>{{ page.title }}</h1>
+<p class="lede" style="margin-bottom:18px">
+  <span class="tags">
+    <span class="tag plain">{{ page.slug }}</span>
+    <span class="tag plain">v{{ page.version }}</span>
+    {% for t in page.tags %}<span class="tag">{{ t }}</span>{% endfor %}
+  </span>
+</p>
+
+{# `body` is markdown rendered with raw HTML disabled -- see web.py:_renderer. #}
+<article class="prose scroller">{{ body|safe }}</article>
+{% endblock %}

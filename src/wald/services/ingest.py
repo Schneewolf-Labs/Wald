@@ -6,6 +6,7 @@ For the stub this runs inline; move it to a background worker before scaling.
 
 from __future__ import annotations
 
+import re
 import uuid
 
 from sqlalchemy import delete
@@ -16,6 +17,12 @@ from wald.services.embeddings import get_embedding_provider
 
 _CHUNK_CHARS = 1200
 
+# A page normally carries its title in metadata *and* repeats it as the body's first
+# heading, which is the natural way to write the file. Prepending the title to that body
+# indexes it twice -- inflating its term frequency against every other page, and showing up
+# in a snippet as "Operational lessons Operational lessons".
+_LEADING_H1 = re.compile(r"\A\s*#\s+.*?(?:\n+|\Z)")
+
 
 def _chunk(text: str, size: int = _CHUNK_CHARS) -> list[str]:
     text = text.strip()
@@ -25,14 +32,16 @@ def _chunk(text: str, size: int = _CHUNK_CHARS) -> list[str]:
     return [text[i : i + size] for i in range(0, len(text), size)]
 
 
-def _reindex(session: Session, source_type: str, source_id: uuid.UUID, title: str, body: str) -> int:
+def _reindex(
+    session: Session, source_type: str, source_id: uuid.UUID, title: str, body: str
+) -> int:
     """Replace all embeddings for one source with freshly computed ones."""
     session.execute(
         delete(Embedding).where(
             Embedding.source_type == source_type, Embedding.source_id == source_id
         )
     )
-    chunks = _chunk(f"{title}\n\n{body}")
+    chunks = _chunk(f"{title}\n\n{_LEADING_H1.sub('', body or '', count=1)}")
     if not chunks:
         return 0
     vectors = get_embedding_provider().embed(chunks)

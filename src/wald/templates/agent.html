@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ agent.name }} — Wald{% endblock %}
+
+{% block content %}
+<p class="crumb"><a href="/">Wald</a> / agents</p>
+
+<h1>{{ agent.name }}</h1>
+<p class="lede" style="margin-bottom:20px">
+  <span class="tags">
+    <span class="tag plain">{{ agent.slug }}</span>
+    <span class="tag plain">{{ agent.protocol }}</span>
+    <span class="tag plain">{{ agent.status }}</span>
+  </span>
+</p>
+
+{% if description %}<article class="prose" style="margin-bottom:34px">{{ description|safe }}</article>{% endif %}
+
+{% if agent.capabilities %}
+  <h2>Capabilities</h2>
+  <p class="tags">{% for c in agent.capabilities %}<span class="tag">{{ c }}</span>{% endfor %}</p>
+  <p class="note" style="border-left-color: var(--border)">
+    Other agents discover this one by capability — <code>find_agents("{{ agent.capabilities[0] }}")</code>
+    over MCP — rather than from a hand-maintained peer list on every instance.
+  </p>
+{% endif %}
+
+{% if agent.endpoint_url or agent.owner %}
+  <h2>Endpoint</h2>
+  <dl class="kv">
+    {% if agent.endpoint_url %}<dt>url</dt><dd><code>{{ agent.endpoint_url }}</code></dd>{% endif %}
+    {% if agent.owner %}<dt>owner</dt><dd>{{ agent.owner }}</dd>{% endif %}
+  </dl>
+{% endif %}
+
+{% if agent.agent_card %}
+  <h2>Agent card</h2>
+  <div class="scroller">
+    <dl class="kv">
+      {% for key, value in agent.agent_card.items() %}
+        <dt>{{ key }}</dt><dd><code>{{ value }}</code></dd>
+      {% endfor %}
+    </dl>
+  </div>
+{% endif %}
+
+<h2>Inbox</h2>
+{% if inbox %}
+  <ul class="hits">
+    {% for m in inbox %}
+      <li class="hit">
+        <span class="score">{{ m.status }}</span>
+        <div class="meta">{{ m.role }} · {{ m.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+        <p class="snippet">{{ m.content }}</p>
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p class="empty">No messages.</p>
+{% endif %}
+{% endblock %}

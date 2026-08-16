@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ resource.name }} — Wald{% endblock %}
+
+{% block content %}
+<p class="crumb"><a href="/">Wald</a> / resources / {{ resource.kind }}</p>
+
+<h1>{{ resource.name }}</h1>
+<p class="lede" style="margin-bottom:20px">
+  <span class="tags">
+    <span class="tag plain">{{ resource.slug }}</span>
+    <span class="tag">{{ resource.kind }}</span>
+    <span class="tag plain">{{ resource.status }}</span>
+    {% for t in resource.tags %}<span class="tag plain">{{ t }}</span>{% endfor %}
+  </span>
+</p>
+
+{% if description %}<article class="prose" style="margin-bottom:34px">{{ description|safe }}</article>{% endif %}
+
+{% if resource.connection %}
+  <h2>Connection</h2>
+  <div class="scroller">
+    <dl class="kv">
+      {% for key, value in resource.connection.items() %}
+        <dt>{{ key }}</dt>
+        <dd><code>{{ value }}</code></dd>
+      {% endfor %}
+    </dl>
+  </div>
+{% endif %}
+
+{% if resource.auth %}
+  <h2>Authentication</h2>
+  <div class="scroller">
+    <dl class="kv">
+      {% for key, value in resource.auth.items() %}
+        <dt>{{ key }}</dt>
+        <dd><code>{{ value }}</code></dd>
+      {% endfor %}
+    </dl>
+  </div>
+  {# Worth stating on the page, not just in the docs: someone reading this should know that
+     a value here is a pointer, and that pasting a real credential in would be the mistake. #}
+  <p class="note">
+    These are <strong>references</strong> to where a credential lives, never the credential.
+    Wald says which door to knock on and which key to fetch; it is not the keyring.
+  </p>
+{% endif %}
+
+{% if resource.owner or resource.docs_url %}
+  <h2>Ownership</h2>
+  <dl class="kv">
+    {% if resource.owner %}<dt>owner</dt><dd>{{ resource.owner }}</dd>{% endif %}
+    {% if resource.docs_url %}
+      <dt>docs</dt><dd><a href="{{ resource.docs_url }}" rel="noreferrer">{{ resource.docs_url }}</a></dd>
+    {% endif %}
+  </dl>
+{% endif %}
+{% endblock %}
