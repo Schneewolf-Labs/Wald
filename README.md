@@ -53,8 +53,8 @@ uv run wald-init-db
 # 3. Load some content
 uv run wald-seed examples/acme
 
-# 4. Run the API (humans + REST)
-uv run wald-api                # http://localhost:8000/docs
+# 4. Run the API — web UI for humans at /, REST at /wiki, /resources, /search
+uv run wald-api                # http://localhost:8000
 
 # 5. Run the MCP server (agents)
 uv run wald-mcp                                # stdio, for an agent that spawns Wald
@@ -82,6 +82,20 @@ WALD_EMBED_DIM=2048        # must match the model
 recreating the `embedding` table and re-running `wald-seed`. That is cheap by design — the content
 directory is the source of truth and the database is a derived index of it. A wrong dimension is
 reported against the setting rather than surfacing as a pgvector error about expected dimensions.
+
+## Humans
+
+The web UI is served at `/`: a faceted index of the wiki, resource directory and agent registry,
+plus search. Wiki pages render at `/ui/wiki/<slug>`, resources at `/ui/resources/<slug>`, agents at
+`/ui/agents/<slug>`.
+
+Server-rendered, no build step and no JavaScript, so a wiki page is a real URL that opens when
+someone pastes it into chat. It is a client of the same service layer the REST API and MCP server
+use — there is no second implementation of "what is a search result".
+
+Markdown is rendered with **raw HTML disabled**. That closes stored XSS through the unauthenticated
+`POST /wiki`, and it is also what makes the hub's own pages correct: several document literal
+`<tool_call>` syntax that an HTML-aware parser would silently swallow.
 
 ## Agents
 

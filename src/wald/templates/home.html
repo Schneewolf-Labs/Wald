@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Wald{% endblock %}
+
+{% block content %}
+<h1>Everything the org knows, in one place</h1>
+<p class="lede">
+  The wiki, the resource directory, and the agent registry — searchable by people here, and by
+  agents over MCP. Both read the same index.
+</p>
+
+<ul class="stats">
+  <li><b>{{ counts.wiki }}</b><span>wiki page{{ '' if counts.wiki == 1 else 's' }}</span></li>
+  <li><b>{{ counts.resources }}</b><span>resource{{ '' if counts.resources == 1 else 's' }}</span></li>
+  <li><b>{{ counts.agents }}</b><span>agent{{ '' if counts.agents == 1 else 's' }}</span></li>
+</ul>
+
+{% if not counts.wiki and not counts.resources and not counts.agents %}
+  <p class="note">
+    Nothing loaded yet. Content lives in files — put markdown under <code>content/wiki/</code> and
+    TOML under <code>content/resources/</code>, then run <code>wald-seed</code>.
+  </p>
+{% endif %}
+
+{% if spaces %}
+<h2>Wiki</h2>
+{% for space, pages in spaces.items() %}
+  <div class="facet">
+    <h3>{{ space }}</h3>
+    <div class="cards">
+      {% for page in pages %}
+        <a class="card" href="/ui/wiki/{{ page.slug }}">
+          <div class="name">{{ page.title }}</div>
+          <div class="slug">{{ page.slug }}{% if page.version > 1 %} · v{{ page.version }}{% endif %}</div>
+        </a>
+      {% endfor %}
+    </div>
+  </div>
+{% endfor %}
+{% endif %}
+
+{% if kinds %}
+<h2>Resources</h2>
+{% for kind, items in kinds.items() %}
+  <div class="facet">
+    <h3>{{ kind }}</h3>
+    <div class="cards">
+      {% for r in items %}
+        <a class="card" href="/ui/resources/{{ r.slug }}">
+          <div class="name">{{ r.name }}</div>
+          <div class="slug">{{ r.slug }}</div>
+          {% if r.description %}<div class="desc">{{ r.description|plain }}</div>{% endif %}
+        </a>
+      {% endfor %}
+    </div>
+  </div>
+{% endfor %}
+{% endif %}
+
+{% if agents %}
+<h2>Agents</h2>
+<div class="cards">
+  {% for a in agents %}
+    <a class="card" href="/ui/agents/{{ a.slug }}">
+      <div class="name">{{ a.name }}</div>
+      <div class="slug">{{ a.slug }} · {{ a.protocol }} · {{ a.status }}</div>
+      {% if a.capabilities %}
+        <div class="desc" style="margin-top:9px">
+          <span class="tags">
+            {% for c in a.capabilities[:4] %}<span class="tag">{{ c }}</span>{% endfor %}
+          </span>
+        </div>
+      {% endif %}
+    </a>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
