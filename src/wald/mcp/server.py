@@ -27,13 +27,32 @@ from sqlalchemy import select
 
 from wald.config import get_settings
 from wald.db import SchemaMismatch, SessionLocal, check_embedding_dim, engine
+from wald.mcp.auth import WaldTokenVerifier, caller_or
 from wald.models import Agent, Resource, WikiPage
 from wald.services import a2a, ingest, rag
 from wald.services import search as search_svc
 
 _settings = get_settings()
 
-mcp = FastMCP("wald", host=_settings.mcp_host, port=_settings.mcp_port)
+# Auth is wired in only when enabled, because passing a token_verifier makes the SDK reject
+# every unauthenticated request -- which is the point when it is on, and a lockout when a hub
+# has upgraded but not yet issued any tokens.
+if _settings.require_auth:
+    from mcp.server.auth.settings import AuthSettings
+
+    mcp = FastMCP(
+        "wald",
+        host=_settings.mcp_host,
+        port=_settings.mcp_port,
+        token_verifier=WaldTokenVerifier(),
+        auth=AuthSettings(
+            issuer_url=_settings.auth_issuer_url,
+            resource_server_url=_settings.auth_issuer_url,
+            required_scopes=["agent"],
+        ),
+    )
+else:
+    mcp = FastMCP("wald", host=_settings.mcp_host, port=_settings.mcp_port)
 
 
 def _require_agent(session: Any, ref: str, role: str) -> Agent:
@@ -51,6 +70,16 @@ def _require_agent(session: Any, ref: str, role: str) -> Agent:
             f"Registered agents: {', '.join(sorted(known)) or '(none)'}"
         )
     return agent
+
+
+def _caller(claimed: str | None) -> str:
+    """Which agent this call is from -- the verified token if there is one, else the claim."""
+    try:
+        return caller_or(claimed, require=_settings.require_auth)
+    except (PermissionError, ValueError) as exc:
+        # ToolError so the caller's MCP client routes it to its failure path rather than
+        # being handed a successful-looking result it has to inspect.
+        raise ToolError(str(exc)) from exc
 
 
 def _parse_uuid(value: str, label: str) -> uuid.UUID:
@@ -213,18 +242,22 @@ def register_agent(
 # --- A2A messaging --------------------------------------------------------
 @mcp.tool()
 def send_agent_message(
-    from_agent: str,
     to_agent: str,
     content: str,
     role: str = "request",
     thread_id: str | None = None,
+    from_agent: str | None = None,
 ) -> dict[str, Any]:
     """Route a message from one registered agent to another (A2A).
+
+    The sender is taken from the bearer token when authentication is enabled; `from_agent` is
+    then ignored, because honouring it would reinstate exactly the spoof the token prevents.
+    Without authentication it is required, and it is a claim rather than a proof.
 
     Pass `thread_id` to continue an existing exchange; omit it to start a new one.
     """
     with SessionLocal() as session:
-        sender = _require_agent(session, from_agent, "sender")
+        sender = _require_agent(session, _caller(from_agent), "sender")
         target = _require_agent(session, to_agent, "target")
         msg = a2a.send_message(
             session,
@@ -239,15 +272,20 @@ def send_agent_message(
 
 
 @mcp.tool()
-def read_inbox(agent: str, unread_only: bool = True, limit: int = 20) -> list[dict[str, Any]]:
-    """Read messages addressed to an agent.
+def read_inbox(
+    unread_only: bool = True, limit: int = 20, agent: str | None = None
+) -> list[dict[str, Any]]:
+    """Read messages addressed to this agent.
+
+    Reads your *own* inbox: with authentication on, the mailbox is the one the token belongs
+    to and `agent` is ignored. Otherwise anyone could read anyone's mail simply by naming it.
 
     Fetching marks queued messages as delivered but not as read: they stay in the unread
     set until `ack_messages`, so an agent that reads its inbox and then crashes sees the
     work again instead of losing it.
     """
     with SessionLocal() as session:
-        target = _require_agent(session, agent, "recipient")
+        target = _require_agent(session, _caller(agent), "recipient")
         messages = a2a.inbox(session, target, unread_only=unread_only)[:limit]
         a2a.mark_delivered(messages)
         out = [_message_summary(m) for m in messages]
@@ -256,10 +294,10 @@ def read_inbox(agent: str, unread_only: bool = True, limit: int = 20) -> list[di
 
 
 @mcp.tool()
-def ack_messages(agent: str, message_ids: list[str]) -> dict[str, Any]:
-    """Mark messages in this agent's inbox as read, once they have been acted on."""
+def ack_messages(message_ids: list[str], agent: str | None = None) -> dict[str, Any]:
+    """Mark messages in this agent's own inbox as read, once they have been acted on."""
     with SessionLocal() as session:
-        target = _require_agent(session, agent, "recipient")
+        target = _require_agent(session, _caller(agent), "recipient")
         ids = [_parse_uuid(m, "message id") for m in message_ids]
         marked = a2a.mark_read(session, target, ids)
         session.commit()

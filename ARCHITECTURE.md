@@ -85,10 +85,14 @@ streaming/long-running conversations and richer protocols (e.g. aligning with em
   content loading (`wald-seed`); MCP over stdio *and* streamable-http; the A2A round trip
   (register / discover / send / inbox / ack); hybrid search on Postgres full-text + pgvector
   fused by RRF, with a functional GIN index; the human web UI, server-rendered at `/`.
-- **Next:** **authn/authz** — the MCP surface takes `from_agent` as an argument, so an agent's
-  identity is a claim rather than a proof, and that is the blocker for exposing the hub beyond a
-  trusted network. It is also what the web UI needs before it can offer editing, since today
-  anyone who can reach the API can rewrite any page. Then Alembic migrations; background
+  Agent authentication: bearer tokens (SHA-256 stored, never the token), opt-in via
+  `WALD_REQUIRE_AUTH`, with `from_agent` derived from the verified identity rather than
+  accepted as a parameter.
+- **Next:** **authz** — authentication says *who* is calling; nothing yet says *what* they may
+  do. Every authenticated agent can read every resource and write any wiki page, so per-space
+  and per-resource permissions are the next piece, and they are what the web UI needs before it
+  can offer editing. The REST surface is also still unauthenticated, which is why it and the
+  MCP surface should not be exposed on the same terms. Then Alembic migrations; background
   re-embedding on writes (ingestion is inline and synchronous, so a wiki write blocks on an
   embedding API call).
 - **Later:** push-based A2A (webhooks/streaming); per-space permissions; audit log; connectors that

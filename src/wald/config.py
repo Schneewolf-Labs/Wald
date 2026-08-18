@@ -68,6 +68,13 @@ class Settings(BaseSettings):
     mcp_host: str = "127.0.0.1"
     mcp_port: int = 8091
 
+    # Agent authentication. Off by default so an existing hub does not lock out every agent
+    # the moment it upgrades -- turning it on is a deliberate act, taken once tokens have been
+    # issued. With it on, `from_agent` stops being a parameter the caller controls.
+    require_auth: bool = False
+    # Advertised to clients during the OAuth-style handshake; only meaningful over HTTP.
+    auth_issuer_url: str = "http://127.0.0.1:8091"
+
     @property
     def has_llm(self) -> bool:
         """True when a real Claude key is configured (otherwise: dev mode)."""
