@@ -49,6 +49,13 @@ def init_schema(target: Engine) -> None:
                 "ON embedding USING GIN (to_tsvector('english', content))"
             )
         )
+        # create_all does not alter existing tables, so a hub that predates agent tokens
+        # would never acquire the column and every verification would error on a missing
+        # attribute. Same reasoning as the index above.
+        conn.execute(text("ALTER TABLE agent ADD COLUMN IF NOT EXISTS token_hash VARCHAR(64)"))
+        conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_agent_token_hash ON agent (token_hash)")
+        )
     check_embedding_dim(target)
 
 
