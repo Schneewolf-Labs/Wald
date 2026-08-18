@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
+from wald import web
 from wald.api import agents, resources, search, wiki
 from wald.config import get_settings
 
@@ -29,6 +30,9 @@ def create_app() -> FastAPI:
     app.include_router(resources.router)
     app.include_router(agents.router)
     app.include_router(search.router)
+    # Last, so the JSON API keeps ownership of the paths it already defines; the web UI
+    # lives at / and under /ui and cannot shadow them.
+    app.include_router(web.router)
     return app
 
 
@@ -49,4 +53,6 @@ def run() -> None:
         raise SystemExit(f"wald-api: {exc}") from exc
 
     settings = get_settings()
-    uvicorn.run("wald.main:app", host=settings.host, port=settings.port, reload=settings.env == "dev")
+    uvicorn.run(
+        "wald.main:app", host=settings.host, port=settings.port, reload=settings.env == "dev"
+    )

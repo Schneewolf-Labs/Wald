@@ -53,8 +53,8 @@ uv run wald-init-db
 # 3. Load some content
 uv run wald-seed examples/acme
 
-# 4. Run the API (humans + REST)
-uv run wald-api                # http://localhost:8000/docs
+# 4. Run the API — web UI for humans at /, REST at /wiki, /resources, /search
+uv run wald-api                # http://localhost:8000
 
 # 5. Run the MCP server (agents)
 uv run wald-mcp                                # stdio, for an agent that spawns Wald
@@ -83,6 +83,20 @@ recreating the `embedding` table and re-running `wald-seed`. That is cheap by de
 directory is the source of truth and the database is a derived index of it. A wrong dimension is
 reported against the setting rather than surfacing as a pgvector error about expected dimensions.
 
+## Humans
+
+The web UI is served at `/`: a faceted index of the wiki, resource directory and agent registry,
+plus search. Wiki pages render at `/ui/wiki/<slug>`, resources at `/ui/resources/<slug>`, agents at
+`/ui/agents/<slug>`.
+
+Server-rendered, no build step and no JavaScript, so a wiki page is a real URL that opens when
+someone pastes it into chat. It is a client of the same service layer the REST API and MCP server
+use — there is no second implementation of "what is a search result".
+
+Markdown is rendered with **raw HTML disabled**. That closes stored XSS through the unauthenticated
+`POST /wiki`, and it is also what makes the hub's own pages correct: several document literal
+`<tool_call>` syntax that an HTML-aware parser would silently swallow.
+
 ## Agents
 
 An MCP client points at Wald and gets twelve tools: `search_wald`, `ask_wald`, `get_wiki_page`,
@@ -98,10 +112,43 @@ A2A messaging is a mailbox. `read_inbox` marks queued messages **delivered**, no
 in the unread set until `ack_messages`. An agent that reads its inbox and then crashes therefore
 sees the work again, because losing queued work silently is worse than delivering it twice.
 
-> **There is no authentication yet.** `send_agent_message` takes the sender's identity as an
-> argument, so any caller can claim to be any agent. That is survivable on a trusted network and
-> is not survivable on an open one. `WALD_MCP_HOST` defaults to loopback for that reason —
-> exposing the hub beyond the machine should be a decision someone makes, not one they inherit.
+## Agent authentication
+
+Each agent can hold a bearer token, which turns its identity from something it *asserts* into
+something it *proves*:
+
+```bash
+uv run wald-token kira            # issue (printed once)
+uv run wald-token kira --revoke   # disable access
+```
+
+Then enable it and point clients at the hub with the token:
+
+```bash
+WALD_REQUIRE_AUTH=true uv run wald-mcp --transport streamable-http
+```
+
+```toml
+[[mcp.servers]]
+name = "wald"
+url = "http://wald.internal:8091/mcp"
+headers = { Authorization = "Bearer $WALD_TOKEN" }
+```
+
+With it on, **`from_agent` is ignored** — `send_agent_message` sends as whoever the token
+belongs to, and `read_inbox`/`ack_messages` operate on that agent's own mailbox. Honouring the
+parameter as a fallback would reinstate exactly the spoof the token prevents, so it is dropped
+rather than merely deprioritised. An unauthenticated request never reaches a tool at all.
+
+Only the SHA-256 of a token is stored. The hub keeps the means to *check* an identity, not to
+present one, so a database dump reveals which agents exist rather than how to impersonate them
+— and a lost token can only be replaced, never recovered. Issuing again invalidates the
+previous token, so rotation and revocation are the same operation and two live tokens for one
+agent cannot coexist. Retiring an agent disables its token without a separate step.
+
+> Authentication is **off by default**, so an existing hub does not lock out every agent the
+> moment it upgrades. Until you turn it on, `from_agent` is still a claim, and `WALD_MCP_HOST`
+> stays on loopback for that reason.
 
 ## Content lives in files
 

@@ -32,6 +32,11 @@ class Agent(UUIDPrimaryKey, Timestamps, Base):
     # Full descriptor (capabilities schema, contact, tags, etc.).
     agent_card: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 
+    # SHA-256 of the agent's bearer token, never the token itself. The hub holds the means to
+    # *check* an identity, not to present one, so a database dump leaks who exists rather than
+    # how to impersonate them. Indexed because verification looks up by hash on every call.
+    token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+
 
 class AgentMessage(UUIDPrimaryKey, Timestamps, Base):
     """A single message routed between two agents (the A2A mailbox substrate).

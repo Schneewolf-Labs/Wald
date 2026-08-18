@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}{% if q %}{{ q }} — {% endif %}Search — Wald{% endblock %}
+
+{% block content %}
+<p class="crumb"><a href="/">Wald</a> / search</p>
+
+{% if not q %}
+  <h1>Search</h1>
+  <p class="lede">
+    Hybrid retrieval: Postgres full-text for exact identifiers, vector similarity for the
+    paraphrase, fused by rank. Ask it a question in a whole sentence.
+  </p>
+{% else %}
+  <h1>{{ hits|length }} result{{ '' if hits|length == 1 else 's' }}</h1>
+  <p class="lede">for <strong>{{ q }}</strong></p>
+
+  {% if hits %}
+    <ul class="hits">
+      {% for hit in hits %}
+        <li class="hit">
+          <span class="score">{{ '%.4f'|format(hit.score) }}</span>
+          {% set href = links.get(hit.source_id|string) %}
+          {% if href %}
+            <a href="{{ href }}">{{ hit.title or hit.source_type }}</a>
+          {% else %}
+            <strong>{{ hit.title or hit.source_type }}</strong>
+          {% endif %}
+          <div class="meta">{{ hit.source_type }}</div>
+          <p class="snippet">{{ hit.snippet|plain }}…</p>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty">
+      Nothing matched. Search covers the wiki, the resource directory and the agent registry —
+      if the content should be there, it may not have been loaded with <code>wald-seed</code>.
+    </p>
+  {% endif %}
+{% endif %}
+{% endblock %}

@@ -15,6 +15,8 @@ dependencies = [
     "httpx>=0.27",
     "anthropic>=0.40",
     "mcp>=1.2",
+    "jinja2>=3.1.6",
+    "markdown>=3.10.3",
 ]
 
 [project.optional-dependencies]
@@ -28,6 +30,7 @@ wald-api = "wald.main:run"
 wald-mcp = "wald.mcp.server:run"
 wald-init-db = "wald.db:init_db_cli"
 wald-seed = "wald.services.seed:seed_cli"
+wald-token = "wald.services.tokens:token_cli"
 
 [build-system]
 requires = ["hatchling"]
