@@ -33,7 +33,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from wald.models import Agent, Resource, WikiPage, WikiPageRevision
-from wald.services import ingest
+from wald.services import authz, ingest
 
 _FENCE = "+++"
 
@@ -62,6 +62,7 @@ _AGENT_FIELDS = {
     "owner",
     "status",
     "agent_card",
+    "grants",
 }
 _WIKI_FIELDS = {"slug", "title", "space", "tags", "author"}
 
@@ -132,6 +133,19 @@ def _check_fields(data: dict[str, Any], allowed: set[str], path: Path) -> None:
     unknown = set(data) - allowed
     if unknown:
         raise SeedError(f"{path}: unknown field(s): {', '.join(sorted(unknown))}")
+
+
+def _check_grants(data: dict[str, Any], path: Path) -> None:
+    """Reject malformed grants at load time, where the file being fixed is on screen.
+
+    Under enforcement a grant that failed to parse would deny at request time -- correct,
+    but diagnosed from the far end of an MCP connection instead of here.
+    """
+    for text in data.get("grants", []):
+        try:
+            authz.parse_grant(text)
+        except ValueError as exc:
+            raise SeedError(f"{path}: {exc}") from exc
 
 
 def _changed(obj: Any, data: dict[str, Any]) -> dict[str, Any]:
@@ -210,6 +224,8 @@ def _seed_simple(
     for path in sorted(root.glob("*.toml")):
         for i, data in enumerate(_entries(path, plural)):
             _check_fields(data, allowed, path)
+            if model is Agent:
+                _check_grants(data, path)
             slug = data.get("slug") or (path.stem if i == 0 else None)
             if not slug:
                 raise SeedError(f"{path}: entry {i} needs an explicit 'slug'")

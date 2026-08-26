@@ -21,8 +21,9 @@ import re
 from sqlalchemy import Float, func, select
 from sqlalchemy.orm import Session
 
-from wald.models import Embedding
+from wald.models import Embedding, Resource, WikiPage
 from wald.schemas import SearchHit
+from wald.services.authz import Grants
 from wald.services.embeddings import get_embedding_provider
 
 _RRF_K = 60  # reciprocal-rank-fusion damping constant
@@ -63,8 +64,58 @@ def _lexical_ranking(session: Session, query: str, limit: int) -> list[Embedding
     return list(session.scalars(stmt))
 
 
-def search(session: Session, query: str, top_k: int = 6) -> list[SearchHit]:
-    """Return fused, de-duplicated hits across all pillars."""
+def _visible(
+    session: Session, candidates: list[tuple[float, Embedding]], grants: Grants
+) -> list[tuple[float, Embedding]]:
+    """Drop hits the caller's grants do not cover.
+
+    Filtering happens on the candidate list rather than in the retrieval SQL, and *before*
+    the top_k cut rather than after -- an agent allowed one space should get its k best
+    hits from that space, not k minus however many better-ranked forbidden documents
+    happened to outrank them. Agent-registry hits always pass: discovery is what the
+    registry is for, and it holds no content beyond what an agent announces about itself.
+    """
+    wiki_ids = [e.source_id for _, e in candidates if e.source_type == "wiki"]
+    resource_ids = [e.source_id for _, e in candidates if e.source_type == "resource"]
+    # .all() first: passing the Result straight to dict() would read its .keys() method as
+    # "this is a mapping" and fail trying to subscript it.
+    spaces = (
+        dict(
+            session.execute(
+                select(WikiPage.id, WikiPage.space).where(WikiPage.id.in_(wiki_ids))
+            ).all()
+        )
+        if wiki_ids
+        else {}
+    )
+    slugs = (
+        dict(
+            session.execute(
+                select(Resource.id, Resource.slug).where(Resource.id.in_(resource_ids))
+            ).all()
+        )
+        if resource_ids
+        else {}
+    )
+
+    def allowed(emb: Embedding) -> bool:
+        if emb.source_type == "wiki":
+            return grants.allows("wiki", "read", spaces.get(emb.source_id, ""))
+        if emb.source_type == "resource":
+            return grants.allows("resource", "read", slugs.get(emb.source_id, ""))
+        return True
+
+    return [(score, emb) for score, emb in candidates if allowed(emb)]
+
+
+def search(
+    session: Session, query: str, top_k: int = 6, grants: Grants | None = None
+) -> list[SearchHit]:
+    """Return fused, de-duplicated hits across all pillars.
+
+    ``grants`` scopes the results to what that caller may read; None means unrestricted
+    (the REST surface and the web UI, and the MCP surface while enforcement is off).
+    """
     pool = max(top_k * 3, 10)
     semantic = _semantic_ranking(session, query, pool)
     lexical = _lexical_ranking(session, query, pool)
@@ -91,7 +142,10 @@ def search(session: Session, query: str, top_k: int = 6) -> list[SearchHit]:
         if source not in best or score > best[source][0]:
             best[source] = (score, emb)
 
-    ordered = sorted(best.values(), key=lambda pair: pair[0], reverse=True)[:top_k]
+    ordered = sorted(best.values(), key=lambda pair: pair[0], reverse=True)
+    if grants is not None and not grants.unrestricted:
+        ordered = _visible(session, ordered, grants)
+    ordered = ordered[:top_k]
     return [
         SearchHit(
             source_type=emb.source_type,

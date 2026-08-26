@@ -9,11 +9,12 @@ the scaffold supported -- which quietly meant the hub could only serve agents on
 machine, while the point of a company-wide hub is the ones that are not. `streamable-http`
 serves the whole fleet from one endpoint. Set `WALD_MCP_TRANSPORT`, or pass `--transport`.
 
-**Authentication: there is none yet, and it matters here.** `send_agent_message` takes the
-sender's identity as an argument, so any caller can claim to be any agent. That is
-survivable on a trusted network and is not survivable on an open one. Until agent-scoped
-tokens land, an HTTP-served Wald belongs behind a network boundary, and `WALD_MCP_HOST`
-defaults accordingly.
+**Authentication** is opt-in (`WALD_REQUIRE_AUTH`, see mcp/auth.py): with it on, identity
+comes from the bearer token and `from_agent` is ignored. **Authorization** is a second
+opt-in on top (`WALD_ENFORCE_AUTHZ`, see services/authz.py): grants on the agent's
+registry entry decide which wiki spaces it may read or write and which resources it may
+see. With both off -- the default -- identity is a claim and every caller sees everything,
+which is why `WALD_MCP_HOST` stays on loopback until someone decides otherwise.
 """
 
 from __future__ import annotations
@@ -27,10 +28,11 @@ from sqlalchemy import select
 
 from wald.config import get_settings
 from wald.db import SchemaMismatch, SessionLocal, check_embedding_dim, engine
-from wald.mcp.auth import WaldTokenVerifier, caller_or
+from wald.mcp.auth import WaldTokenVerifier, authenticated_slug, caller_or
 from wald.models import Agent, Resource, WikiPage
-from wald.services import a2a, ingest, rag
+from wald.services import a2a, authz, background, rag
 from wald.services import search as search_svc
+from wald.services import wiki as wiki_svc
 
 _settings = get_settings()
 
@@ -82,6 +84,32 @@ def _caller(claimed: str | None) -> str:
         raise ToolError(str(exc)) from exc
 
 
+def _caller_grants(session: Any) -> authz.Grants:
+    """The caller's grant set, or ALLOW_ALL while enforcement is off.
+
+    With enforcement on there is always a verified identity behind the request (the
+    server refuses to start with authz on and auth off), and that identity always maps to
+    a registered agent, because the token that proved it is a column on the agent's row.
+    """
+    if not _settings.enforce_authz:
+        return authz.ALLOW_ALL
+    slug = authenticated_slug()
+    agent = a2a.resolve_agent(session, slug) if slug else None
+    if agent is None:
+        raise ToolError("authorization is enforced and this request carries no verified agent")
+    try:
+        return authz.Grants(agent.grants or [])
+    except ValueError as exc:
+        # A malformed grant in the registry denies rather than allows, but says why, so
+        # the fix lands in the agent's TOML file instead of in a debugging session.
+        raise ToolError(f"agent '{agent.slug}' has an invalid grant: {exc}") from exc
+
+
+def _require(grants: authz.Grants, pillar: str, action: str, selector: str) -> None:
+    if not grants.allows(pillar, action, selector):
+        raise ToolError(f"not authorized: this agent has no '{pillar}:{action}:{selector}' grant")
+
+
 def _parse_uuid(value: str, label: str) -> uuid.UUID:
     try:
         return uuid.UUID(value)
@@ -118,8 +146,10 @@ def _message_summary(msg: Any) -> dict[str, Any]:
 def search_wald(query: str, top_k: int = 6) -> list[dict[str, Any]]:
     """Hybrid search across the wiki, resource directory, and agent registry."""
     with SessionLocal() as session:
+        grants = _caller_grants(session)
         return [
-            hit.model_dump(mode="json") for hit in search_svc.search(session, query, top_k=top_k)
+            hit.model_dump(mode="json")
+            for hit in search_svc.search(session, query, top_k=top_k, grants=grants)
         ]
 
 
@@ -127,19 +157,29 @@ def search_wald(query: str, top_k: int = 6) -> list[dict[str, Any]]:
 def ask_wald(question: str, top_k: int = 6) -> dict[str, Any]:
     """Ask a natural-language question; returns a synthesized, cited answer."""
     with SessionLocal() as session:
-        return rag.ask(session, question, top_k=top_k).model_dump(mode="json")
+        grants = _caller_grants(session)
+        return rag.ask(session, question, top_k=top_k, grants=grants).model_dump(mode="json")
 
 
 @mcp.tool()
 def get_wiki_page(slug: str) -> dict[str, Any]:
     """Fetch a wiki page by slug (returns title, markdown content, tags)."""
     with SessionLocal() as session:
+        grants = _caller_grants(session)
         page = session.scalar(select(WikiPage).where(WikiPage.slug == slug))
         if page is None:
             # A bare null reads to a model as "this page exists and is empty". Naming the
-            # alternatives turns a typo into a recoverable second attempt.
-            known = session.scalars(select(WikiPage.slug).order_by(WikiPage.slug)).all()
+            # alternatives turns a typo into a recoverable second attempt -- scoped to what
+            # this caller may read, so the hint is not also an inventory of what it may not.
+            known = [
+                s
+                for s, sp in session.execute(
+                    select(WikiPage.slug, WikiPage.space).order_by(WikiPage.slug)
+                )
+                if grants.allows("wiki", "read", sp)
+            ]
             raise ToolError(f"no wiki page '{slug}'. Pages: {', '.join(known) or '(none)'}")
+        _require(grants, "wiki", "read", page.space)
         return {
             "slug": page.slug,
             "title": page.title,
@@ -150,17 +190,62 @@ def get_wiki_page(slug: str) -> dict[str, Any]:
         }
 
 
+@mcp.tool()
+def write_wiki_page(
+    slug: str,
+    title: str,
+    content: str,
+    space: str | None = None,
+    tags: list[str] | None = None,
+    author: str | None = None,
+) -> dict[str, Any]:
+    """Create a wiki page, or update it (markdown; a new version is recorded on change).
+
+    This is how an agent writes a lesson back into the hub instead of carrying it alone.
+    Re-writing identical content is a no-op rather than a version bump. `space` and `tags`
+    are kept as-is on update when omitted. The recorded author is the verified identity
+    when there is one; `author` is only honoured without authentication.
+    """
+    with SessionLocal() as session:
+        grants = _caller_grants(session)
+        existing = session.scalar(select(WikiPage).where(WikiPage.slug == slug))
+        # Both ends of a move need the grant: writing *into* a space, and rewriting a page
+        # that currently lives in one.
+        if existing is not None:
+            _require(grants, "wiki", "write", existing.space)
+        _require(grants, "wiki", "write", space or (existing.space if existing else "general"))
+        page, created = wiki_svc.upsert_page(
+            session,
+            slug=slug,
+            title=title,
+            content=content,
+            space=space,
+            tags=tags,
+            author=authenticated_slug() or author or "mcp",
+        )
+        result = {
+            "slug": page.slug,
+            "space": page.space,
+            "version": page.version,
+            "created": created,
+        }
+        background.finish_write(session, "wiki", page)
+        return result
+
+
 # --- Resource directory ---------------------------------------------------
 @mcp.tool()
 def list_resources(kind: str | None = None) -> list[dict[str, Any]]:
     """List enterprise resources, optionally filtered by kind (database/api/service/tool/dataset)."""
     with SessionLocal() as session:
+        grants = _caller_grants(session)
         stmt = select(Resource).order_by(Resource.name)
         if kind:
             stmt = stmt.where(Resource.kind == kind)
         return [
             {"slug": r.slug, "name": r.name, "kind": r.kind, "description": r.description}
             for r in session.scalars(stmt)
+            if grants.allows("resource", "read", r.slug)
         ]
 
 
@@ -171,10 +256,16 @@ def get_resource(slug: str) -> dict[str, Any]:
     `auth` holds a *reference* to where a credential lives, never the credential itself.
     """
     with SessionLocal() as session:
+        grants = _caller_grants(session)
         r = session.scalar(select(Resource).where(Resource.slug == slug))
         if r is None:
-            known = session.scalars(select(Resource.slug).order_by(Resource.slug)).all()
+            known = [
+                s
+                for s in session.scalars(select(Resource.slug).order_by(Resource.slug))
+                if grants.allows("resource", "read", s)
+            ]
             raise ToolError(f"no resource '{slug}'. Resources: {', '.join(known) or '(none)'}")
+        _require(grants, "resource", "read", r.slug)
         return {
             "slug": r.slug,
             "name": r.name,
@@ -234,9 +325,9 @@ def register_agent(
                 "status": "active",
             },
         )
-        ingest.index_agent(session, agent)
-        session.commit()
-        return {"registered": _agent_summary(agent), "created": created}
+        summary = _agent_summary(agent)
+        background.finish_write(session, "agent", agent)
+        return {"registered": summary, "created": created}
 
 
 # --- A2A messaging --------------------------------------------------------
@@ -325,6 +416,15 @@ def run() -> None:
         help="stdio for a local child process; streamable-http for remote agents",
     )
     args = parser.parse_args()
+
+    # Grants attach to identities the token layer has *proved*; enforcing them against
+    # claimed identities would be a lock on a door with no wall, so refuse the combination
+    # outright rather than serving something that looks locked and is not.
+    if _settings.enforce_authz and not _settings.require_auth:
+        raise SystemExit(
+            "wald-mcp: WALD_ENFORCE_AUTHZ requires WALD_REQUIRE_AUTH -- authorization "
+            "without authentication would enforce grants against unverified identities"
+        )
 
     # Fail at startup rather than on every query. A server whose configured dimension no
     # longer matches the stored column answers `list_tools` perfectly and then fails every
