@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from wald.db import get_session
 from wald.models import WikiPage, WikiPageRevision
 from wald.schemas import WikiPageIn, WikiPageOut, WikiPageUpdate
-from wald.services import ingest
+from wald.services import background
 
 router = APIRouter(prefix="/wiki", tags=["wiki"])
 
@@ -29,10 +29,11 @@ def create_page(body: WikiPageIn, session: Session = Depends(get_session)) -> Wi
     session.add(page)
     session.flush()
     session.add(
-        WikiPageRevision(page_id=page.id, version=page.version, title=page.title, content=page.content)
+        WikiPageRevision(
+            page_id=page.id, version=page.version, title=page.title, content=page.content
+        )
     )
-    ingest.index_wiki_page(session, page)
-    session.commit()
+    background.finish_write(session, "wiki", page)
     return page
 
 
@@ -68,6 +69,5 @@ def update_page(
             author=author,
         )
     )
-    ingest.index_wiki_page(session, page)
-    session.commit()
+    background.finish_write(session, "wiki", page)
     return page

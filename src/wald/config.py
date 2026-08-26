@@ -75,6 +75,18 @@ class Settings(BaseSettings):
     # Advertised to clients during the OAuth-style handshake; only meaningful over HTTP.
     auth_issuer_url: str = "http://127.0.0.1:8091"
 
+    # Authorization. Off by default for the same reason authentication is: grants did not
+    # exist before this setting did, so enforcing them on upgrade would mean every agent's
+    # empty grant list denies everything. Requires WALD_REQUIRE_AUTH -- grants attach to a
+    # proven identity, and the MCP server refuses to start with authz on and auth off.
+    enforce_authz: bool = False
+
+    # Indexing. On: a write commits immediately and re-embedding happens on a worker
+    # thread (services/background.py), so writes never block on an embedding API call.
+    # Off: chunks are written in the same transaction as the write -- what tests want,
+    # and what read-your-writes search requires.
+    background_indexing: bool = True
+
     @property
     def has_llm(self) -> bool:
         """True when a real Claude key is configured (otherwise: dev mode)."""
