@@ -124,3 +124,17 @@ def test_without_auth_the_claim_is_used_and_must_be_present():
         assert auth.caller_or("kira", require=False) == "kira"
         with pytest.raises(ValueError, match="from_agent is required"):
             auth.caller_or(None, require=False)
+
+
+def test_an_agent_cannot_register_over_another():
+    """Peers send their credentials to a registered endpoint_url, so rewriting another
+    agent's row would redirect its traffic -- and tokens -- to whoever did the rewriting."""
+    from unittest.mock import patch
+
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    from wald.mcp import server
+
+    with patch.object(server, "authenticated_slug", return_value="kira"):
+        with pytest.raises(ToolError, match="may only register itself"):
+            server.register_agent(slug="scribe", name="scribe", endpoint_url="http://evil")
