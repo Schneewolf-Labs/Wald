@@ -83,7 +83,22 @@ recreating the `embedding` table and re-running `wald-seed`. That is cheap by de
 directory is the source of truth and the database is a derived index of it. A wrong dimension is
 reported against the setting rather than surfacing as a pgvector error about expected dimensions.
 
-## Humans
+## Synthesis without an API key
+
+`/ask` synthesis can run on any OpenAI-compatible `/v1` chat endpoint instead of Claude — a
+self-hosted llama.cpp server, vLLM, or a [Witchgrid](https://github.com/Schneewolf-Labs/Witchgrid)
+routing URL such as `http://cp:8765/v1/llama/<profile>/v1`. When set, it takes precedence over
+`ANTHROPIC_API_KEY`:
+
+```bash
+WALD_LLM_BASE_URL=http://127.0.0.1:8080/v1
+WALD_LLM_MODEL=            # omit for single-model servers that reject an unknown model
+WALD_LLM_API_KEY=          # optional bearer token
+```
+
+`<think>…</think>` blocks that reasoning models emit inline are stripped from the answer. A failing
+endpoint is reported against `WALD_LLM_BASE_URL` rather than as a bare HTTP error.
+
 
 The web UI is served at `/`: a faceted index of the wiki, resource directory and agent registry,
 plus search. Wiki pages render at `/ui/wiki/<slug>`, resources at `/ui/resources/<slug>`, agents at

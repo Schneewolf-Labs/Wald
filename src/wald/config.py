@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     )
     answer_model: str = "claude-opus-5"
 
+    # Any OpenAI-compatible `/v1` chat endpoint, which takes precedence over Anthropic -- a
+    # self-hosted llama.cpp server, or a Witchgrid routing URL. Include the `/v1`: e.g.
+    # http://127.0.0.1:8080/v1. `llm_model` is omitted from the request when unset, for
+    # single-model servers that reject an unknown model.
+    llm_base_url: str | None = None
+    llm_model: str | None = None
+    llm_api_key: str | None = None
+
     # Embeddings
     voyage_api_key: str | None = Field(
         default=None,
@@ -77,8 +85,8 @@ class Settings(BaseSettings):
 
     @property
     def has_llm(self) -> bool:
-        """True when a real Claude key is configured (otherwise: dev mode)."""
-        return bool(self.anthropic_api_key)
+        """True when an LLM endpoint or a Claude key is configured (otherwise: dev mode)."""
+        return bool(self.llm_base_url or self.anthropic_api_key)
 
     @property
     def has_embeddings(self) -> bool:

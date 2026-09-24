@@ -70,7 +70,8 @@ All tables share a UUID primary key and `created_at` / `updated_at`.
 2. **Semantic** — cosine distance over `embedding` via pgvector.
 3. **Fuse** — reciprocal-rank fusion of the two result sets.
 
-`ask` (RAG) runs `search`, then hands the top chunks to Claude to synthesize a cited answer.
+`ask` (RAG) runs `search`, then hands the top chunks to Claude (or any OpenAI-compatible endpoint
+set in `WALD_LLM_BASE_URL`) to synthesize a cited answer.
 
 ## A2A model (v1)
 
