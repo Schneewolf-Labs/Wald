@@ -32,7 +32,7 @@ a web UI for humans and a programmatic surface (REST + an **MCP server**) for ag
 | API              | FastAPI + Uvicorn                                            |
 | Data / ORM       | PostgreSQL + `pgvector`, SQLAlchemy 2.0                      |
 | Agent interface  | Model Context Protocol (MCP) server via the `mcp` SDK        |
-| RAG synthesis    | Anthropic Claude (`claude-opus-4-8`)                         |
+| RAG synthesis    | Anthropic Claude, or any OpenAI-compatible `/v1` endpoint    |
 | Embeddings       | Voyage AI (`voyage-3.5`, 1024-dim) + keyless dev fallback    |
 | Config           | `pydantic-settings` (env-driven)                            |
 | Packaging        | `uv`                                                         |
@@ -61,8 +61,9 @@ uv run wald-mcp                                # stdio, for an agent that spawns
 uv run wald-mcp --transport streamable-http    # http://localhost:8091/mcp, for the fleet
 ```
 
-Without `ANTHROPIC_API_KEY` / `VOYAGE_API_KEY` set, Wald runs in **dev mode**: embeddings use a
-deterministic local hash and the `/ask` endpoint returns retrieved context without LLM synthesis.
+Without an LLM (`WALD_LLM_BASE_URL` / `ANTHROPIC_API_KEY`) or embedder (`WALD_EMBED_BASE_URL` /
+`VOYAGE_API_KEY`) configured, Wald runs in **dev mode**: embeddings use a deterministic local hash
+and the `/ask` endpoint returns retrieved context without LLM synthesis.
 This keeps the whole stack runnable end-to-end with zero external dependencies.
 
 ## Embeddings without an API key
