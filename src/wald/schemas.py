@@ -114,6 +114,8 @@ class AgentMessageOut(_ORM):
     thread_id: uuid.UUID
     from_agent_id: uuid.UUID
     to_agent_id: uuid.UUID
+    from_agent: str  # slug
+    to_agent: str  # slug
     role: str
     content: str
     status: str

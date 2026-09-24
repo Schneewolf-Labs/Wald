@@ -138,3 +138,28 @@ def test_resolve_accepts_slug_or_uuid(session, pair):
     assert a2a.resolve_agent(session, "alice").id == alice.id
     assert a2a.resolve_agent(session, str(alice.id)).id == alice.id
     assert a2a.resolve_agent(session, "not-a-real-agent") is None
+
+
+def test_a_message_names_its_sender_and_recipient_by_slug(session, pair):
+    alice, bob = pair
+    a2a.send_message(session, from_agent=alice, to_agent=bob, content="work")
+    session.flush()
+    session.expire_all()
+
+    # Agents never see UUIDs over MCP. Without the slug, a recipient could not tell who wrote
+    # to it, so it could not decide whether to act on the message.
+    (received,) = a2a.inbox(session, bob, unread_only=True)
+    assert received.from_agent == "alice"
+    assert received.to_agent == "bob"
+
+
+def test_the_mcp_inbox_row_carries_slugs(session, pair):
+    from wald.mcp.server import _message_summary
+
+    alice, bob = pair
+    msg = a2a.send_message(session, from_agent=alice, to_agent=bob, content="work")
+    session.flush()
+
+    row = _message_summary(msg)
+    assert row["from_agent"] == "alice"
+    assert row["to_agent"] == "bob"

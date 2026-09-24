@@ -112,6 +112,10 @@ A2A messaging is a mailbox. `read_inbox` marks queued messages **delivered**, no
 in the unread set until `ack_messages`. An agent that reads its inbox and then crashes therefore
 sees the work again, because losing queued work silently is worse than delivering it twice.
 
+Every message names its sender and recipient by slug (`from_agent`, `to_agent`), since slugs
+are how agents address each other and the only identity they can check a message against.
+With authentication off that sender is still just a claim; see below.
+
 ## Agent authentication
 
 Each agent can hold a bearer token, which turns its identity from something it *asserts* into

@@ -106,6 +106,8 @@ def _message_summary(msg: Any) -> dict[str, Any]:
         "id": str(msg.id),
         "thread_id": str(msg.thread_id),
         "from_agent_id": str(msg.from_agent_id),
+        "from_agent": msg.from_agent,
+        "to_agent": msg.to_agent,
         "role": msg.role,
         "content": msg.content,
         "status": msg.status,
