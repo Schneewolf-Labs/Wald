@@ -70,9 +70,14 @@ def get_inbox(
     agent = a2a.resolve_agent(session, slug)
     if agent is None:
         raise HTTPException(status_code=404, detail=f"agent '{slug}' not found")
-    return [AgentMessageOut.model_validate(m) for m in a2a.inbox(session, agent, unread_only=unread_only)]
+    return [
+        AgentMessageOut.model_validate(m)
+        for m in a2a.inbox(session, agent, unread_only=unread_only)
+    ]
 
 
 @router.get("/threads/{thread_id}", response_model=list[AgentMessageOut])
-def get_thread(thread_id: uuid.UUID, session: Session = Depends(get_session)) -> list[AgentMessageOut]:
+def get_thread(
+    thread_id: uuid.UUID, session: Session = Depends(get_session)
+) -> list[AgentMessageOut]:
     return [AgentMessageOut.model_validate(m) for m in a2a.thread(session, thread_id)]
