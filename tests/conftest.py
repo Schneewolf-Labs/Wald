@@ -47,6 +47,16 @@ def _engine():
 
     engine = create_engine(test_url, future=True)
     init_schema(engine)
+
+    # Tests roll back, but the few that must commit (a worker session cannot see a
+    # savepoint) leave rows behind if a run dies before their cleanup. Those survive into
+    # every later run and break any test that expects an empty hub, so start from one.
+    # Only ever the `_test` database built above, never the configured one.
+    from wald.models.base import Base
+
+    tables = ", ".join(f'"{t.name}"' for t in Base.metadata.sorted_tables)
+    with engine.begin() as conn:
+        conn.exec_driver_sql(f"TRUNCATE {tables} CASCADE")
     yield engine
     engine.dispose()
 
