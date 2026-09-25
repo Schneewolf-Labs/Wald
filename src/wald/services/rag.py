@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from wald.config import Settings, get_settings
 from wald.schemas import AskResponse, SearchHit
+from wald.services.authz import Grants
 from wald.services.search import search
 
 _SYSTEM = (
@@ -101,9 +102,14 @@ def synthesize(settings: Settings, question: str, hits: list[SearchHit]) -> str:
     return _synthesize_anthropic(settings, user)
 
 
-def ask(session: Session, question: str, top_k: int = 6) -> AskResponse:
+def ask(
+    session: Session, question: str, top_k: int = 6, grants: Grants | None = None
+) -> AskResponse:
+    # Grants scope retrieval itself, not just the citation list: context the caller may
+    # not read must never reach the synthesis prompt, or the answer becomes a paraphrase
+    # channel around the permission it cites nothing from.
     settings = get_settings()
-    hits = search(session, question, top_k=top_k)
+    hits = search(session, question, top_k=top_k, grants=grants)
 
     if not settings.has_llm:
         # Dev mode: return retrieved context without LLM synthesis.

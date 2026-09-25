@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from wald.db import get_session
 from wald.models import Agent
 from wald.schemas import AgentIn, AgentMessageIn, AgentMessageOut, AgentOut
-from wald.services import a2a, ingest
+from wald.services import a2a, background
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -23,8 +23,7 @@ def register_agent(body: AgentIn, session: Session = Depends(get_session)) -> Ag
     agent = Agent(**body.model_dump())
     session.add(agent)
     session.flush()
-    ingest.index_agent(session, agent)
-    session.commit()
+    background.finish_write(session, "agent", agent)
     return agent
 
 
@@ -70,9 +69,14 @@ def get_inbox(
     agent = a2a.resolve_agent(session, slug)
     if agent is None:
         raise HTTPException(status_code=404, detail=f"agent '{slug}' not found")
-    return [AgentMessageOut.model_validate(m) for m in a2a.inbox(session, agent, unread_only=unread_only)]
+    return [
+        AgentMessageOut.model_validate(m)
+        for m in a2a.inbox(session, agent, unread_only=unread_only)
+    ]
 
 
 @router.get("/threads/{thread_id}", response_model=list[AgentMessageOut])
-def get_thread(thread_id: uuid.UUID, session: Session = Depends(get_session)) -> list[AgentMessageOut]:
+def get_thread(
+    thread_id: uuid.UUID, session: Session = Depends(get_session)
+) -> list[AgentMessageOut]:
     return [AgentMessageOut.model_validate(m) for m in a2a.thread(session, thread_id)]

@@ -13,10 +13,24 @@ cleanly when it is absent, so `pytest` stays useful on a machine with no Docker.
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
+
+# Environment pinned before anything imports wald.config (get_settings caches on first
+# call; wald is only imported inside fixtures and tests). Inline indexing, for both rules
+# above: tests assert chunks exist the moment a write returns, and the background worker
+# opens its own sessions on the *configured* engine -- the real hub, exactly what the
+# suite must never touch. And the suite must not inherit the developer's .env or shell:
+# a configured embedding endpoint would make it depend on a live local server (and its
+# dimension), and real API keys would turn dev-mode assertions into billed network calls.
+os.environ.setdefault("WALD_BACKGROUND_INDEXING", "false")
+for _var in ("WALD_EMBED_BASE_URL", "VOYAGE_API_KEY", "ANTHROPIC_API_KEY"):
+    os.environ[_var] = ""
+os.environ["WALD_EMBED_DIM"] = "1024"
 
 
 @pytest.fixture(scope="session")

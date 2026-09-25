@@ -88,13 +88,15 @@ streaming/long-running conversations and richer protocols (e.g. aligning with em
   fused by RRF, with a functional GIN index; the human web UI, server-rendered at `/`.
   Agent authentication: bearer tokens (SHA-256 stored, never the token), opt-in via
   `WALD_REQUIRE_AUTH`, with `from_agent` derived from the verified identity rather than
-  accepted as a parameter.
-- **Next:** **authz** — authentication says *who* is calling; nothing yet says *what* they may
-  do. Every authenticated agent can read every resource and write any wiki page, so per-space
-  and per-resource permissions are the next piece, and they are what the web UI needs before it
-  can offer editing. The REST surface is also still unauthenticated, which is why it and the
-  MCP surface should not be exposed on the same terms. Then Alembic migrations; background
-  re-embedding on writes (ingestion is inline and synchronous, so a wiki write blocks on an
-  embedding API call).
-- **Later:** push-based A2A (webhooks/streaming); per-space permissions; audit log; connectors that
+  accepted as a parameter. Authorization: per-space wiki and per-slug resource grants on
+  the agent's registry entry (`services/authz.py`), enforced across the MCP surface —
+  including retrieval itself, so `ask` cannot paraphrase context the caller may not read —
+  opt-in via `WALD_ENFORCE_AUTHZ` (which requires auth). A `write_wiki_page` MCP tool,
+  gated by `wiki:write` grants. Background re-embedding: writes commit first and a worker
+  thread rebuilds chunks from the committed row (`WALD_BACKGROUND_INDEXING`), so writes no
+  longer block on an embedding API call.
+- **Next:** the REST surface is still unauthenticated — it and the MCP surface should not
+  be exposed on the same terms until it, too, checks tokens (and then grants, which is
+  what the web UI needs before it can offer editing). Then Alembic migrations.
+- **Later:** push-based A2A (webhooks/streaming); audit log; connectors that
   auto-populate the resource directory; eval harness for RAG answer quality.

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from wald.db import get_session
 from wald.models import Resource
 from wald.schemas import ResourceIn, ResourceOut
-from wald.services import ingest
+from wald.services import background
 
 router = APIRouter(prefix="/resources", tags=["resources"])
 
@@ -21,8 +21,7 @@ def create_resource(body: ResourceIn, session: Session = Depends(get_session)) -
     resource = Resource(**body.model_dump())
     session.add(resource)
     session.flush()
-    ingest.index_resource(session, resource)
-    session.commit()
+    background.finish_write(session, "resource", resource)
     return resource
 
 

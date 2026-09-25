@@ -53,8 +53,12 @@ def init_schema(target: Engine) -> None:
         # would never acquire the column and every verification would error on a missing
         # attribute. Same reasoning as the index above.
         conn.execute(text("ALTER TABLE agent ADD COLUMN IF NOT EXISTS token_hash VARCHAR(64)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_agent_token_hash ON agent (token_hash)"))
+        # Same story for grants: a hub that predates authorization gets the column with an
+        # empty default, which under enforcement means "no knowledge access" -- deny by
+        # default is the only default worth having for a permission column.
         conn.execute(
-            text("CREATE INDEX IF NOT EXISTS ix_agent_token_hash ON agent (token_hash)")
+            text("ALTER TABLE agent ADD COLUMN IF NOT EXISTS grants VARCHAR[] DEFAULT '{}'")
         )
     check_embedding_dim(target)
 

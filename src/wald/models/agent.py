@@ -37,6 +37,10 @@ class Agent(UUIDPrimaryKey, Timestamps, Base):
     # how to impersonate them. Indexed because verification looks up by hash on every call.
     token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
+    # What this agent may do, as "pillar:action:selector" grant strings (services/authz.py).
+    # Only enforced when WALD_ENFORCE_AUTHZ is on; empty then means no knowledge access.
+    grants: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+
 
 class AgentMessage(UUIDPrimaryKey, Timestamps, Base):
     """A single message routed between two agents (the A2A mailbox substrate).

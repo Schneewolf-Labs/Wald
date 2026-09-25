@@ -115,9 +115,13 @@ Markdown is rendered with **raw HTML disabled**. That closes stored XSS through 
 
 ## Agents
 
-An MCP client points at Wald and gets twelve tools: `search_wald`, `ask_wald`, `get_wiki_page`,
-`list_resources`, `get_resource`, `find_agents`, `list_agents`, `register_agent`,
-`send_agent_message`, `read_inbox`, `ack_messages`, `get_conversation`.
+An MCP client points at Wald and gets thirteen tools: `search_wald`, `ask_wald`, `get_wiki_page`,
+`write_wiki_page`, `list_resources`, `get_resource`, `find_agents`, `list_agents`,
+`register_agent`, `send_agent_message`, `read_inbox`, `ack_messages`, `get_conversation`.
+
+`write_wiki_page` is how an agent records a lesson in the hub instead of carrying it
+alone. Writing identical content back is a no-op rather than a version bump, so page
+history stays a record of actual edits — the same discipline as the seed loader.
 
 `register_agent` is how a fleet discovers itself instead of every instance carrying a
 hand-maintained list of every other instance — the N² configuration problem. An agent announces
@@ -165,6 +169,47 @@ agent cannot coexist. Retiring an agent disables its token without a separate st
 > Authentication is **off by default**, so an existing hub does not lock out every agent the
 > moment it upgrades. Until you turn it on, `from_agent` is still a claim, and `WALD_MCP_HOST`
 > stays on loopback for that reason.
+
+## Agent authorization
+
+Authentication settles *who* is calling; grants settle *what* they may do. Each agent's
+registry entry (its TOML file, or `register_agent`) can carry a `grants` list:
+
+```toml
+grants = ["wiki:read:*", "wiki:write:agent-notes", "resource:read:merlina"]
+```
+
+A grant is `pillar:action:selector` — wiki grants select a **space**, resource grants a
+**slug**, `*` matches all, and the grammar is validated strictly at load time so a typo
+fails the seed instead of surfacing later as a mystery denial.
+
+Enforcement is a second opt-in on top of authentication:
+
+```bash
+WALD_REQUIRE_AUTH=true WALD_ENFORCE_AUTHZ=true uv run wald-mcp --transport streamable-http
+```
+
+With it on, `get_wiki_page` and `get_resource` check the caller's grants, `list_resources`
+filters to what it may read, `write_wiki_page` requires `wiki:write` on the target space,
+and — the part that matters most — `search_wald` and `ask_wald` **scope retrieval itself**:
+context an agent may not read never reaches the synthesis prompt, so an answer cannot
+become a paraphrase channel around a permission. Agent-registry entries stay visible to
+everyone, because discovery is what the registry is for, and A2A mailboxes are already
+bound to the verified token identity.
+
+Authz without authn would be a lock on a door with no wall, so `WALD_ENFORCE_AUTHZ`
+requires `WALD_REQUIRE_AUTH` and the server refuses the combination outright. An agent
+with an empty grants list under enforcement has no knowledge access — deny by default.
+
+## Background indexing
+
+Writes no longer block on the embedding provider: a write commits first, and re-embedding
+runs on a single worker thread that re-reads the committed row (`WALD_BACKGROUND_INDEXING`,
+on by default). The tradeoff is a moment where a write has landed but search does not see
+it yet; set it to `false` for read-your-writes search. The seed loader always indexes
+inline, because `--dry-run` must count chunks and roll everything back in one transaction.
+A failed background reindex logs and leaves the previous chunks standing, so search
+degrades to slightly-stale rather than half-indexed.
 
 ## Content lives in files
 
