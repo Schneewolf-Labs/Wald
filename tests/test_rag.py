@@ -148,7 +148,7 @@ def test_has_llm_reflects_either_option():
 def test_ask_synthesizes_over_the_endpoint(server, monkeypatch):
     reply["content"] = "<think>hm</think>Use WireGuard [1]."
     monkeypatch.setattr(rag, "get_settings", lambda: Settings(llm_base_url=server))
-    monkeypatch.setattr(rag, "search", lambda session, q, top_k: HITS)
+    monkeypatch.setattr(rag, "search", lambda session, q, top_k, **_: HITS)
 
     resp = rag.ask(None, "How do I VPN?")  # type: ignore[arg-type]
     assert resp.synthesized
@@ -158,7 +158,7 @@ def test_ask_synthesizes_over_the_endpoint(server, monkeypatch):
 
 def test_dev_mode_message_mentions_both_options(monkeypatch):
     monkeypatch.setattr(rag, "get_settings", lambda: Settings())
-    monkeypatch.setattr(rag, "search", lambda session, q, top_k: HITS)
+    monkeypatch.setattr(rag, "search", lambda session, q, top_k, **_: HITS)
 
     resp = rag.ask(None, "q")  # type: ignore[arg-type]
     assert not resp.synthesized
