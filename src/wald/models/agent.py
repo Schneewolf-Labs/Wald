@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from wald.models.base import Base, Timestamps, UUIDPrimaryKey
 
@@ -57,3 +57,17 @@ class AgentMessage(UUIDPrimaryKey, Timestamps, Base):
     role: Mapped[str] = mapped_column(String(32), default="request")
     content: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(32), default="queued", index=True)
+
+    # Joined so a message always carries who sent it. Agents address each other by slug and
+    # never see a UUID, so an id-only message would leave the recipient unable to tell who
+    # wrote to it -- and unable to decide whether to trust it.
+    sender: Mapped[Agent] = relationship(foreign_keys=[from_agent_id], lazy="joined")
+    recipient: Mapped[Agent] = relationship(foreign_keys=[to_agent_id], lazy="joined")
+
+    @property
+    def from_agent(self) -> str:
+        return self.sender.slug
+
+    @property
+    def to_agent(self) -> str:
+        return self.recipient.slug
