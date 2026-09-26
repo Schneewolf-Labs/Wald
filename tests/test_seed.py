@@ -174,3 +174,25 @@ def test_a_matching_dimension_passes(session, _engine):
     from wald.db import check_embedding_dim
 
     check_embedding_dim(_engine)  # must not raise
+
+
+# --- Agent grants ----------------------------------------------------------
+def _agent_dir(tmp_path: Path, grants_line: str) -> Path:
+    (tmp_path / "agents").mkdir()
+    (tmp_path / "agents" / "scoped.toml").write_text(f'name = "Scoped"\n{grants_line}\n')
+    return tmp_path
+
+
+def test_agent_grants_are_loaded(session, tmp_path):
+    from wald.models import Agent
+
+    seed(session, _agent_dir(tmp_path, 'grants = ["wiki:read:*", "resource:read:merlina"]'))
+    agent = session.scalar(select(Agent).where(Agent.slug == "scoped"))
+    assert agent.grants == ["wiki:read:*", "resource:read:merlina"]
+
+
+def test_malformed_grant_fails_the_load_and_names_the_file(session, tmp_path):
+    # Under enforcement a grant that failed to parse denies at request time -- correct,
+    # but diagnosed from the far end of an MCP connection instead of at the file.
+    with pytest.raises(SeedError, match="scoped.toml"):
+        seed(session, _agent_dir(tmp_path, 'grants = ["wiki:destroy:*"]'))
