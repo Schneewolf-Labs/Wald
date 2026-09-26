@@ -29,9 +29,7 @@ def create_page(body: WikiPageIn, session: Session = Depends(get_session)) -> Wi
     session.add(page)
     session.flush()
     session.add(
-        WikiPageRevision(
-            page_id=page.id, version=page.version, title=page.title, content=page.content
-        )
+        WikiPageRevision(page_id=page.id, version=page.version, title=page.title, content=page.content)
     )
     ingest.index_wiki_page(session, page)
     session.commit()
