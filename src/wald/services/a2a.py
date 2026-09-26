@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from wald.models import Agent, AgentMessage
@@ -67,6 +67,15 @@ def thread(session: Session, thread_id: uuid.UUID) -> list[AgentMessage]:
         .order_by(AgentMessage.created_at.asc())
     )
     return list(session.scalars(stmt))
+
+
+def in_thread(session: Session, thread_id: uuid.UUID, agent: Agent) -> bool:
+    """Whether an agent has sent or received any message in a thread."""
+    stmt = select(AgentMessage.id).where(
+        AgentMessage.thread_id == thread_id,
+        or_(AgentMessage.from_agent_id == agent.id, AgentMessage.to_agent_id == agent.id),
+    )
+    return session.scalar(stmt.limit(1)) is not None
 
 
 def mark_delivered(messages: list[AgentMessage]) -> None:

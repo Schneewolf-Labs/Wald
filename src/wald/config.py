@@ -54,7 +54,10 @@ class Settings(BaseSettings):
     content_dir: str = "content"
 
     # Server
-    host: str = "0.0.0.0"
+    # Loopback by default, for the same reason as `mcp_host` below: with authentication
+    # off, the REST API accepts any caller as any agent. Binding wider is a decision to
+    # make together with WALD_REQUIRE_AUTH, not one to inherit.
+    host: str = "127.0.0.1"
     port: int = 8000
     env: str = "dev"
 
@@ -80,6 +83,12 @@ class Settings(BaseSettings):
     # empty grant list denies everything. Requires WALD_REQUIRE_AUTH -- grants attach to a
     # proven identity, and the MCP server refuses to start with authz on and auth off.
     enforce_authz: bool = False
+
+    # The human web UI has no login: Wald has agent identities, not human ones. With
+    # WALD_REQUIRE_AUTH on it is therefore closed, since otherwise it would show every
+    # page, resource and inbox the token checks withhold. Set this when the UI sits
+    # behind authentication of your own (an SSO proxy, a VPN) and should stay open.
+    web_ui_open: bool = False
 
     # Indexing. On: a write commits immediately and re-embedding happens on a worker
     # thread (services/background.py), so writes never block on an embedding API call.

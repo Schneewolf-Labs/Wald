@@ -25,7 +25,7 @@ def test_parse_grant_selector_defaults_to_wildcard():
         "wiki::x",  # empty action
         "wiki:destroy",  # unknown action
         "mailbox:read",  # unknown pillar
-        "resource:write:x",  # pair not in the grammar
+        "resource:delete:x",  # known pillar, unknown action
     ],
 )
 def test_parse_grant_rejects_outside_grammar(bad):

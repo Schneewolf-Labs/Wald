@@ -93,8 +93,8 @@ Server-rendered, no build step and no JavaScript, so a wiki page is a real URL t
 someone pastes it into chat. It is a client of the same service layer the REST API and MCP server
 use — there is no second implementation of "what is a search result".
 
-Markdown is rendered with **raw HTML disabled**. That closes stored XSS through the unauthenticated
-`POST /wiki`, and it is also what makes the hub's own pages correct: several document literal
+Markdown is rendered with **raw HTML disabled**. That closes stored XSS through `POST /wiki`
+(unauthenticated unless `WALD_REQUIRE_AUTH` is on), and it is also what makes the hub's own pages correct: several document literal
 `<tool_call>` syntax that an HTML-aware parser would silently swallow.
 
 ## Agents
@@ -184,6 +184,27 @@ bound to the verified token identity.
 Authz without authn would be a lock on a door with no wall, so `WALD_ENFORCE_AUTHZ`
 requires `WALD_REQUIRE_AUTH` and the server refuses the combination outright. An agent
 with an empty grants list under enforcement has no knowledge access — deny by default.
+
+### The REST API and web UI
+
+Both settings apply to the REST API exactly as to MCP; a policy that held on one port and
+not the other would not be a policy. Send the same token as `Authorization: Bearer <token>`:
+
+- Without a valid token every route answers `401`, except `/health`. A token that does not
+  verify is rejected even with authentication off, rather than treated as anonymous.
+- `POST /agents/messages` sends as the token's agent and ignores `from_agent`;
+  `/agents/{slug}/inbox` is readable only by its owner, `/agents/threads/{id}` only by the
+  thread's participants, who are also the only ones who can post into it (on MCP too).
+- `POST /agents` may only register the caller's own slug.
+- Under enforcement, `/wiki`, `/resources`, `/search` and `/ask` apply the same grants as
+  the MCP tools. What a caller may not read answers `404`, as if absent, so the API does
+  not reveal which slugs exist. `POST /resources` needs `resource:write:<slug>`.
+
+The web UI has no login — Wald has agent identities, not human ones — so while
+authentication is on it is **closed** (`403`) rather than a way around it. Set
+`WALD_WEB_UI_OPEN=true` if it sits behind authentication of your own, such as an SSO proxy
+or VPN. `wald-api` binds to `127.0.0.1` by default for the same reason `wald-mcp` does; set
+`WALD_HOST` once authentication is on.
 
 ## Background indexing
 

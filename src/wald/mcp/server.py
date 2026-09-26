@@ -350,13 +350,21 @@ def send_agent_message(
     with SessionLocal() as session:
         sender = _require_agent(session, _caller(from_agent), "sender")
         target = _require_agent(session, to_agent, "target")
+        thread = _parse_uuid(thread_id, "thread_id") if thread_id else None
+        if (
+            thread is not None
+            and authenticated_slug()
+            and not a2a.in_thread(session, thread, sender)
+        ):
+            # Continuing a thread is for its participants; anyone else starts their own.
+            raise ToolError(f"no thread '{thread_id}' involving '{sender.slug}'")
         msg = a2a.send_message(
             session,
             from_agent=sender,
             to_agent=target,
             content=content,
             role=role,
-            thread_id=_parse_uuid(thread_id, "thread_id") if thread_id else None,
+            thread_id=thread,
         )
         session.commit()
         return {"message_id": str(msg.id), "thread_id": str(msg.thread_id), "status": msg.status}
@@ -397,11 +405,19 @@ def ack_messages(message_ids: list[str], agent: str | None = None) -> dict[str, 
 
 @mcp.tool()
 def get_conversation(thread_id: str) -> list[dict[str, Any]]:
-    """Read a whole A2A thread in order, oldest first."""
+    """Read a whole A2A thread in order, oldest first.
+
+    With authentication on, only a participant -- an agent that sent or received a message
+    in it -- may read a thread; to anyone else it does not exist.
+    """
     with SessionLocal() as session:
-        return [
-            _message_summary(m) for m in a2a.thread(session, _parse_uuid(thread_id, "thread_id"))
-        ]
+        thread = _parse_uuid(thread_id, "thread_id")
+        verified = authenticated_slug()
+        if verified:
+            reader = _require_agent(session, verified, "reader")
+            if not a2a.in_thread(session, thread, reader):
+                raise ToolError(f"no thread '{thread_id}' involving '{reader.slug}'")
+        return [_message_summary(m) for m in a2a.thread(session, thread)]
 
 
 def run() -> None:
