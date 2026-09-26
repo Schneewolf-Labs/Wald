@@ -223,8 +223,25 @@ not the other would not be a policy. Send the same token as `Authorization: Bear
 The web UI has no login — Wald has agent identities, not human ones — so while
 authentication is on it is **closed** (`403`) rather than a way around it. Set
 `WALD_WEB_UI_OPEN=true` if it sits behind authentication of your own, such as an SSO proxy
-or VPN. `wald-api` binds to `127.0.0.1` by default for the same reason `wald-mcp` does; set
-`WALD_HOST` once authentication is on.
+or VPN.
+
+Both servers bind to `127.0.0.1` by default, and **refuse to start** on any other address
+while `WALD_REQUIRE_AUTH` is off: a wide bind without authentication lets anyone who can
+reach the port act as any agent, and a default only protects someone who never changes it.
+Turn authentication on before setting `WALD_HOST` / `WALD_MCP_HOST`. If something else
+already keeps the port private — a container whose published port is bound to the host's
+loopback, say — `WALD_ALLOW_UNAUTHENTICATED=true` permits it.
+
+A typical fleet deployment:
+
+```bash
+WALD_HOST=0.0.0.0
+WALD_MCP_HOST=0.0.0.0
+WALD_MCP_TRANSPORT=streamable-http
+WALD_REQUIRE_AUTH=true
+WALD_ENFORCE_AUTHZ=true    # once every agent's TOML carries its grants
+WALD_WEB_UI_OPEN=true      # only if the UI sits behind your own SSO / VPN
+```
 
 ## Background indexing
 
