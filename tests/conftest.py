@@ -28,7 +28,7 @@ from sqlalchemy.exc import SQLAlchemyError
 # a configured embedding endpoint would make it depend on a live local server (and its
 # dimension), and real API keys would turn dev-mode assertions into billed network calls.
 os.environ.setdefault("WALD_BACKGROUND_INDEXING", "false")
-for _var in ("WALD_EMBED_BASE_URL", "VOYAGE_API_KEY", "ANTHROPIC_API_KEY"):
+for _var in ("WALD_EMBED_BASE_URL", "WALD_LLM_BASE_URL", "VOYAGE_API_KEY", "ANTHROPIC_API_KEY"):
     os.environ[_var] = ""
 os.environ["WALD_EMBED_DIM"] = "1024"
 

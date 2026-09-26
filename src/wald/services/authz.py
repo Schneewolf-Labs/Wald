@@ -10,6 +10,8 @@ A grant is a string, ``pillar:action[:selector]``:
     wiki:write:runbooks        write pages in "runbooks"
     resource:read:merlina      read one resource's connection + auth details
     resource:read:*            read the whole resource directory
+    resource:write:merlina     create that resource entry (REST; the seed loader is the
+                               usual way resources arrive)
     wiki:read                  selector defaults to *
 
 Strings rather than a permission table because grants live where agents are declared --
@@ -39,6 +41,7 @@ _ALLOWED = {
     ("wiki", "read"),
     ("wiki", "write"),
     ("resource", "read"),
+    ("resource", "write"),
 }
 
 

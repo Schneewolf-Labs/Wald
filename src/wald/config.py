@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     )
     answer_model: str = "claude-opus-5"
 
+    # Any OpenAI-compatible `/v1` chat endpoint, which takes precedence over Anthropic -- a
+    # self-hosted llama.cpp server, or a Witchgrid routing URL. Include the `/v1`: e.g.
+    # http://127.0.0.1:8080/v1. `llm_model` is omitted from the request when unset, for
+    # single-model servers that reject an unknown model.
+    llm_base_url: str | None = None
+    llm_model: str | None = None
+    llm_api_key: str | None = None
+
     # Embeddings
     voyage_api_key: str | None = Field(
         default=None,
@@ -54,7 +62,10 @@ class Settings(BaseSettings):
     content_dir: str = "content"
 
     # Server
-    host: str = "0.0.0.0"
+    # Loopback by default, for the same reason as `mcp_host` below: with authentication
+    # off, the REST API accepts any caller as any agent. Binding wider is a decision to
+    # make together with WALD_REQUIRE_AUTH, not one to inherit.
+    host: str = "127.0.0.1"
     port: int = 8000
     env: str = "dev"
 
@@ -81,6 +92,12 @@ class Settings(BaseSettings):
     # proven identity, and the MCP server refuses to start with authz on and auth off.
     enforce_authz: bool = False
 
+    # The human web UI has no login: Wald has agent identities, not human ones. With
+    # WALD_REQUIRE_AUTH on it is therefore closed, since otherwise it would show every
+    # page, resource and inbox the token checks withhold. Set this when the UI sits
+    # behind authentication of your own (an SSO proxy, a VPN) and should stay open.
+    web_ui_open: bool = False
+
     # Indexing. On: a write commits immediately and re-embedding happens on a worker
     # thread (services/background.py), so writes never block on an embedding API call.
     # Off: chunks are written in the same transaction as the write -- what tests want,
@@ -89,8 +106,8 @@ class Settings(BaseSettings):
 
     @property
     def has_llm(self) -> bool:
-        """True when a real Claude key is configured (otherwise: dev mode)."""
-        return bool(self.anthropic_api_key)
+        """True when an LLM endpoint or a Claude key is configured (otherwise: dev mode)."""
+        return bool(self.llm_base_url or self.anthropic_api_key)
 
     @property
     def has_embeddings(self) -> bool:

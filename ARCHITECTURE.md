@@ -70,7 +70,8 @@ All tables share a UUID primary key and `created_at` / `updated_at`.
 2. **Semantic** — cosine distance over `embedding` via pgvector.
 3. **Fuse** — reciprocal-rank fusion of the two result sets.
 
-`ask` (RAG) runs `search`, then hands the top chunks to Claude to synthesize a cited answer.
+`ask` (RAG) runs `search`, then hands the top chunks to Claude (or any OpenAI-compatible endpoint
+set in `WALD_LLM_BASE_URL`) to synthesize a cited answer.
 
 ## A2A model (v1)
 
@@ -88,14 +89,16 @@ streaming/long-running conversations and richer protocols (e.g. aligning with em
   Agent authentication: bearer tokens (SHA-256 stored, never the token), opt-in via
   `WALD_REQUIRE_AUTH`, with `from_agent` derived from the verified identity rather than
   accepted as a parameter. Authorization: per-space wiki and per-slug resource grants on
-  the agent's registry entry (`services/authz.py`), enforced across the MCP surface —
-  including retrieval itself, so `ask` cannot paraphrase context the caller may not read —
-  opt-in via `WALD_ENFORCE_AUTHZ` (which requires auth). A `write_wiki_page` MCP tool,
+  the agent's registry entry (`services/authz.py`), enforced across the MCP and REST
+  surfaces alike (`api/auth.py`) — including retrieval itself, so `ask` cannot paraphrase
+  context the caller may not read — opt-in via `WALD_ENFORCE_AUTHZ` (which requires auth).
+  A2A threads are readable and continuable only by their participants. The web UI, which
+  has no login, closes while auth is on unless `WALD_WEB_UI_OPEN` says it sits behind
+  authentication of the operator's own. A `write_wiki_page` MCP tool,
   gated by `wiki:write` grants. Background re-embedding: writes commit first and a worker
   thread rebuilds chunks from the committed row (`WALD_BACKGROUND_INDEXING`), so writes no
   longer block on an embedding API call.
-- **Next:** the REST surface is still unauthenticated — it and the MCP surface should not
-  be exposed on the same terms until it, too, checks tokens (and then grants, which is
-  what the web UI needs before it can offer editing). Then Alembic migrations.
+- **Next:** human identity for the web UI (a login, so it can apply grants and offer
+  editing instead of being either open or closed). Then Alembic migrations.
 - **Later:** push-based A2A (webhooks/streaming); audit log; connectors that
   auto-populate the resource directory; eval harness for RAG answer quality.

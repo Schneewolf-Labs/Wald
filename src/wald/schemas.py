@@ -102,7 +102,7 @@ class AgentOut(_ORM):
 
 
 class AgentMessageIn(BaseModel):
-    from_agent: str  # slug or id
+    from_agent: str | None = None  # slug or id; ignored when authenticated
     to_agent: str  # slug or id
     content: str
     role: str = "request"
