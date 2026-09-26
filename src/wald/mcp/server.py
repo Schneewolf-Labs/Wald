@@ -312,7 +312,15 @@ def register_agent(
 
     Lets a fleet discover itself instead of every instance carrying a hand-maintained list
     of every other instance. Re-registering after a restart updates the same row.
+
+    With authentication on, an agent may only register itself. Peers resolve each other's
+    `endpoint_url` from this row and send their own credentials there, so letting any token
+    holder rewrite another agent's row hands it every message -- and token -- meant for that
+    agent. It would also let anyone revive an agent an operator had retired.
     """
+    verified = authenticated_slug()
+    if verified and verified != slug:
+        raise ToolError(f"authenticated as '{verified}'; an agent may only register itself")
     with SessionLocal() as session:
         agent, created = a2a.register(
             session,
