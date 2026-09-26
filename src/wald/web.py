@@ -11,6 +11,10 @@ something people will paste into chat and expect to open.
 
 Routes live under `/ui` so they cannot collide with the JSON API, which owns `/wiki`,
 `/resources`, `/agents` and `/search` and stays the primary surface.
+
+There is no login: Wald has agent identities, not human ones. So with WALD_REQUIRE_AUTH on,
+the UI is closed unless WALD_WEB_UI_OPEN says someone put it behind authentication of
+their own -- an open UI would otherwise show everything the token checks withhold.
 """
 
 from __future__ import annotations
@@ -26,12 +30,26 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from wald.config import Settings, get_settings
 from wald.db import get_session
 from wald.models import Agent, Resource, WikiPage
 from wald.services import a2a
 from wald.services import search as search_svc
 
-router = APIRouter(tags=["web"], include_in_schema=False)
+
+def _ui_enabled(settings: Settings = Depends(get_settings)) -> None:
+    if (settings.require_auth or settings.enforce_authz) and not settings.web_ui_open:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "The web UI is closed while WALD_REQUIRE_AUTH is on, because it has no "
+                "login of its own. Set WALD_WEB_UI_OPEN=true if it sits behind your own "
+                "authentication (an SSO proxy, a VPN)."
+            ),
+        )
+
+
+router = APIRouter(tags=["web"], include_in_schema=False, dependencies=[Depends(_ui_enabled)])
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 

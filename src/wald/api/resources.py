@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from wald.api.auth import Caller, get_caller, require
 from wald.db import get_session
 from wald.models import Resource
 from wald.schemas import ResourceIn, ResourceOut
@@ -15,7 +16,12 @@ router = APIRouter(prefix="/resources", tags=["resources"])
 
 
 @router.post("", response_model=ResourceOut, status_code=201)
-def create_resource(body: ResourceIn, session: Session = Depends(get_session)) -> Resource:
+def create_resource(
+    body: ResourceIn,
+    session: Session = Depends(get_session),
+    caller: Caller = Depends(get_caller),
+) -> Resource:
+    require(caller, "resource", "write", body.slug)
     if session.scalar(select(Resource).where(Resource.slug == body.slug)):
         raise HTTPException(status_code=409, detail=f"slug '{body.slug}' already exists")
     resource = Resource(**body.model_dump())
@@ -27,19 +33,25 @@ def create_resource(body: ResourceIn, session: Session = Depends(get_session)) -
 
 @router.get("", response_model=list[ResourceOut])
 def list_resources(
-    kind: str | None = None, tag: str | None = None, session: Session = Depends(get_session)
+    kind: str | None = None,
+    tag: str | None = None,
+    session: Session = Depends(get_session),
+    caller: Caller = Depends(get_caller),
 ) -> list[Resource]:
     stmt = select(Resource).order_by(Resource.name)
     if kind:
         stmt = stmt.where(Resource.kind == kind)
     if tag:
         stmt = stmt.where(Resource.tags.any(tag))
-    return list(session.scalars(stmt))
+    return [r for r in session.scalars(stmt) if caller.grants.allows("resource", "read", r.slug)]
 
 
 @router.get("/{slug}", response_model=ResourceOut)
-def get_resource(slug: str, session: Session = Depends(get_session)) -> Resource:
+def get_resource(
+    slug: str, session: Session = Depends(get_session), caller: Caller = Depends(get_caller)
+) -> Resource:
     resource = session.scalar(select(Resource).where(Resource.slug == slug))
-    if resource is None:
+    # Unreadable reads as absent, as in the listing -- see api/wiki.py.
+    if resource is None or not caller.grants.allows("resource", "read", resource.slug):
         raise HTTPException(status_code=404, detail=f"resource '{slug}' not found")
     return resource

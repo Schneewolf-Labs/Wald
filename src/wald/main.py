@@ -45,6 +45,15 @@ def run() -> None:
 
     from wald.db import SchemaMismatch, check_embedding_dim, engine
 
+    settings = get_settings()
+    # As in the MCP server: grants attach to identities the token layer has proved, so
+    # enforcing them without authentication would look locked and not be.
+    if settings.enforce_authz and not settings.require_auth:
+        raise SystemExit(
+            "wald-api: WALD_ENFORCE_AUTHZ requires WALD_REQUIRE_AUTH -- authorization "
+            "without authentication would enforce grants against unverified identities"
+        )
+
     # Same reasoning as the MCP server: a dimension mismatch makes every search fail while
     # the service looks healthy, so refuse to start instead.
     try:
@@ -52,7 +61,6 @@ def run() -> None:
     except SchemaMismatch as exc:
         raise SystemExit(f"wald-api: {exc}") from exc
 
-    settings = get_settings()
     uvicorn.run(
         "wald.main:app", host=settings.host, port=settings.port, reload=settings.env == "dev"
     )
