@@ -28,6 +28,7 @@ from sqlalchemy import select
 
 from wald.config import get_settings
 from wald.db import SchemaMismatch, SessionLocal, check_embedding_dim, engine
+from wald.guards import serving_problem
 from wald.mcp.auth import WaldTokenVerifier, authenticated_slug, caller_or
 from wald.models import Agent, Resource, WikiPage
 from wald.services import a2a, authz, background, rag
@@ -443,14 +444,11 @@ def run() -> None:
     )
     args = parser.parse_args()
 
-    # Grants attach to identities the token layer has *proved*; enforcing them against
-    # claimed identities would be a lock on a door with no wall, so refuse the combination
-    # outright rather than serving something that looks locked and is not.
-    if _settings.enforce_authz and not _settings.require_auth:
-        raise SystemExit(
-            "wald-mcp: WALD_ENFORCE_AUTHZ requires WALD_REQUIRE_AUTH -- authorization "
-            "without authentication would enforce grants against unverified identities"
-        )
+    # stdio has no listener, so only the network transports have a host to check.
+    host = None if args.transport == "stdio" else _settings.mcp_host
+    problem = serving_problem(_settings, host)
+    if problem:
+        raise SystemExit(f"wald-mcp: {problem}")
 
     # Fail at startup rather than on every query. A server whose configured dimension no
     # longer matches the stored column answers `list_tools` perfectly and then fails every

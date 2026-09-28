@@ -83,6 +83,10 @@ class Settings(BaseSettings):
     # the moment it upgrades -- turning it on is a deliberate act, taken once tokens have been
     # issued. With it on, `from_agent` stops being a parameter the caller controls.
     require_auth: bool = False
+    # Both servers refuse to listen beyond loopback with require_auth off (see guards.py).
+    # This overrides that, for when something else keeps the port private -- a container
+    # whose published port is bound to the host's loopback, for instance.
+    allow_unauthenticated: bool = False
     # Advertised to clients during the OAuth-style handshake; only meaningful over HTTP.
     auth_issuer_url: str = "http://127.0.0.1:8091"
 

@@ -45,14 +45,12 @@ def run() -> None:
 
     from wald.db import SchemaMismatch, check_embedding_dim, engine
 
+    from wald.guards import serving_problem
+
     settings = get_settings()
-    # As in the MCP server: grants attach to identities the token layer has proved, so
-    # enforcing them without authentication would look locked and not be.
-    if settings.enforce_authz and not settings.require_auth:
-        raise SystemExit(
-            "wald-api: WALD_ENFORCE_AUTHZ requires WALD_REQUIRE_AUTH -- authorization "
-            "without authentication would enforce grants against unverified identities"
-        )
+    problem = serving_problem(settings, settings.host)
+    if problem:
+        raise SystemExit(f"wald-api: {problem}")
 
     # Same reasoning as the MCP server: a dimension mismatch makes every search fail while
     # the service looks healthy, so refuse to start instead.
